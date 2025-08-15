@@ -1,0 +1,28 @@
+服务器的常用命令：注：服务器的终端上不需要输入前面的/
+/list          //显示有多少个玩家在线
+/kick {playername}     //踢出某一个玩家,kick后面跟玩家名字
+/title {}               //设置服务器终端的标题
+/stop                   //停止服务器的运行
+/ver                    //显示服务器核心的信息
+/version                  //显示服务器核心的信息
+/time (set|add|query)     //设置服务器世界的世界set为切换到，add为添加当前的  
+/weather (clear|rain|thunder)    //设置当前服务器中的天气,clear为晴天，rain为下雨，thunder为雷暴雨
+/op <targets>            //给予一个玩家服务器管理员的权限,<target>写玩家名字
+/say <message>           //在服务器终端上发送消息，<message>为你要发送的内容
+/help                    //获取服务器上的命令帮助
+/give <targets> <item> [<count>]  //给予某一个玩家或实体物品，<target>为你要给予的对象，<item>为给予什么东西,[<count>]为数量，不填默认为一个   
+/save                   //保存服务器的存档（当前状态）
+/seed                    //查看服务器使用的存档的种子号
+/setworldspawn           //设置服务器的出生点，客户端上设置的是角色所在位置，服务器上请填入坐标
+/spawnpoint [<targets>] [<pos>] [<angle>]      //为特定玩家设置出生点,[<target>]为目标玩家名称，[<pos>]为坐标，[<angle>]朝向，客户端不输入为当前玩家的朝向
+/w <targets> <message>                //向服务器中的特定玩家发送消息<target>为要发送的对象,<message>为需要发送的的内容
+/spectate <target> <player>           //让一个玩家旁观一个实体玩家要旁观的实体,<target>为对象，必须为玩家名、目标选择器或UUID。且目标选择器必须为单一数量,<player>观看的玩家的名称
+/stopsound <targets> [<类别>] [<sound>]   //停止某一个声音<target>可以是master、music（音乐）、record、weather（天气）、block（方块）、hostile、neutral、player（玩家）、ambient、voice（话筒）、ui(UI界面)
+/reload                      //让服务器重新加载数据包
+/summon <entity> <pos> <nbt>     //生成一个实体,<entity>为什么实体，<pos>为坐标x y z，<nbt>为实体的数据格式，可以不填
+/teammsg 或 /tm                       //给命令的执行者实体所在的队伍全体成员发送消息
+/tick                            //可以跟rate <rate>设置目标游戏刻速率,freeze冻结游戏刻的流逝和所有游戏元素，玩家及玩家骑乘的实体除外,unfreeze取消冻结游戏,step [<time>]取消冻结后，进行步进特定数量的游戏刻，然后恢复冻结,仅能在已冻结的情况下使用,step stop停止正在进行的游戏刻步进，并重新冻结游戏,sprint [<time>]快进,忽略目标游戏刻速率，使游戏刻的流逝尽可能快，并在指定时间后恢复至此命令执行之前的游戏刻流逝状态,恢复后游戏会显示此过程中的游戏刻性能信息,sprint stop停止正在进行的快进
+/deop <target>                        //撤销玩家的服务器管理员身份.<target>为玩家名字
+/msg <targets> <message>                   //将一条私聊消息发送给一个或多个玩家<targets>为对象，一个或多个玩家的名字<message>为要发送的内容
+/teleport <targets> <destination>                           //传送实体（玩家、生物等）到指定的地点，并修改其旋转角度<targets>为对象，<destination>并与某个实体朝向保持一致
+/tp <target1> <target2>                                  //传送某个玩家到某个目标,<target1或2>不填为自己，两个都填为把<target1>传送到target2,target2可以是坐标，玩家，实体,但是target1不能是坐标
