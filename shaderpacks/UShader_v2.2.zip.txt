@@ -1,8 +1,0 @@
-#Fri May 29 20:53:20 CST 2026
-END_VolumetricSmoke=false
-RTAO_ENABLED=false
-ResolutionScale=0.5
-cloudShadowsEnabled=false
-cloudVolumeEnabled=false
-fogVolumeEnabled=false
-shadowMapResolution=1024

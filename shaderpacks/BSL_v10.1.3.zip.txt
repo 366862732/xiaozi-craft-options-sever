@@ -1,4 +1,0 @@
-#Sat May 30 09:53:15 CST 2026
-CLOUDS=0
-shadowDistance=512.0
-shadowMapResolution=3072
