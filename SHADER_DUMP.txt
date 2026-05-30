@@ -1,0 +1,1927 @@
+#version 460 core
+#define UP_FACE_TINT 1.0f
+#define IS_WINDOWS 
+#define PATCHED_SHADER 
+#define TAA_PATCH 
+#define Z_AXIS_FACE_TINT 0.8f
+#define TRANSLUCENT 
+#define X_AXIS_FACE_TINT 0.6f
+#define DOWN_FACE_TINT 0.5f
+#define NO_SHADE_FACE_TINT 1.0f
+//Use quad shuffling to compute fragment mip
+//#extension GL_KHR_shader_subgroup_quad: enable
+#ifdef USE_SINGLE_TRI
+#define USE_NV_BARRY
+#endif
+
+#ifdef USE_NV_BARRY
+#extension GL_NV_fragment_shader_barycentric: require
+#endif
+
+layout(binding = 0) uniform sampler2D blockModelAtlas;
+layout(binding = 2) uniform sampler2D depthTex;
+
+//#define DEBUG_RENDER
+
+//TODO: need to fix when merged quads have discardAlpha set to false but they span multiple tiles
+// however they are not a full block
+
+layout(location = 0) in flat uvec4 interData;
+#ifndef USE_NV_BARRY
+layout(location = 1) in vec2 uv;
+#endif
+
+#ifdef DEBUG_RENDER
+layout(location = 7) in flat uint quadDebug;
+#endif
+
+
+#ifndef PATCHED_SHADER
+layout(location = 0) out vec4 outColour;
+#else
+
+//Bind the model buffer and import the model system as we need it
+#define MODEL_BUFFER_BINDING 3
+struct BlockModel {
+    uint faceData[6];
+    uint flagsA;
+    uint colourTint;
+    uint customId;
+    uint _pad[7];
+};
+
+//TODO: FIXME: this isnt actually correct cause depending on the face (i think) it could be 1/64 th of a position off
+// but im going to assume that since we are dealing with huge render distances, this shouldent matter that much
+float extractFaceIndentation(uint faceData) {
+    uint enc = (faceData>>16)&63u;
+    enc += uint(enc==63u);//convert 63 to 64 cause of pain reasons
+    return float(enc)/64.0;
+}
+
+vec4 extractFaceSizes(uint faceData) {
+    return (vec4(faceData&0xFu, (faceData>>4)&0xFu, (faceData>>8)&0xFu, (faceData>>12)&0xFu)/16.0)+vec4(0.0,1.0/16.0,0.0,1.0/16.0);
+}
+
+uint faceHasAlphaCuttout(uint faceData) {
+    return (faceData>>22)&1u;
+}
+
+//TODO: try and get rid of
+uint faceHasAlphaCuttoutOverride(uint faceData) {
+    return (faceData>>23)&1u;
+}
+
+uint faceTintState(uint faceData) {
+    return (faceData>>24)&3u;
+}
+
+bool modelHasBiomeLUT(BlockModel model) {
+    return ((model.flagsA)&2u) != 0;
+}
+
+bool modelIsTranslucent(BlockModel model) {
+    return ((model.flagsA)&4u) != 0;
+}
+
+bool modelIsShaded(BlockModel model) {
+    return ((model.flagsA)&8u) != 0;
+}
+
+#endif
+
+layout(binding = 0, std140) uniform SceneUniform {
+    mat4 MVP;
+    ivec3 baseSectionPos;
+    uint frameId;
+    vec3 cameraSubPos;
+};
+
+//TODO: see if making the stride 2*4*4 bytes or something cause you get that 16 byte write
+struct DrawCommand {
+    uint  count;
+    uint  instanceCount;
+    uint  firstIndex;
+    int  baseVertex;
+    uint  baseInstance;
+};
+
+
+#ifdef BLOCK_MODEL_TEXTURE_BINDING
+layout(binding = BLOCK_MODEL_TEXTURE_BINDING) uniform sampler2D blockModelAtlas;
+#endif
+
+
+#ifndef Quad
+#define Quad ivec2
+#endif
+#ifdef QUAD_BUFFER_BINDING
+layout(binding = QUAD_BUFFER_BINDING, std430) readonly restrict buffer QuadBuffer {
+    Quad quadData[];
+};
+#endif
+
+#ifdef DRAW_BUFFER_BINDING
+layout(binding = DRAW_BUFFER_BINDING, std430) writeonly restrict buffer DrawBuffer {
+    DrawCommand cmdBuffer[];
+};
+#endif
+
+#ifdef DRAW_COUNT_BUFFER_BINDING
+layout(binding = DRAW_COUNT_BUFFER_BINDING, std430) restrict buffer DrawCommandCountBuffer {
+    uint cmdGenDispatchX;
+    uint cmdGenDispatchY;
+    uint cmdGenDispatchZ;
+
+    uint opaqueDrawCount;
+    uint translucentDrawCount;
+    uint temporalOpaqueDrawCount;
+
+    DrawCommand cullDrawIndirectCommand;
+};
+#endif
+
+#ifdef SECTION_METADATA_BUFFER_BINDING
+layout(binding = SECTION_METADATA_BUFFER_BINDING, std430) readonly restrict buffer SectionBuffer {
+    SectionMeta sectionData[];
+};
+#endif
+
+#ifdef INDIRECT_SECTION_LOOKUP_BINDING
+layout(binding = INDIRECT_SECTION_LOOKUP_BINDING, std430) readonly restrict buffer IndirectSectionLookupBuffer {
+    uint sectionCount;
+    uint indirectLookup[];
+};
+#endif
+
+#ifndef VISIBILITY_ACCESS
+#define VISIBILITY_ACCESS readonly
+#endif
+#ifdef VISIBILITY_BUFFER_BINDING
+layout(binding = VISIBILITY_BUFFER_BINDING, std430) VISIBILITY_ACCESS restrict buffer VisibilityBuffer {
+    uint visibilityData[];
+};
+#endif
+
+#ifdef MODEL_BUFFER_BINDING
+layout(binding = MODEL_BUFFER_BINDING, std430) readonly restrict buffer ModelBuffer {
+    BlockModel modelData[];
+};
+#endif
+
+#ifdef MODEL_COLOUR_BUFFER_BINDING
+layout(binding = MODEL_COLOUR_BUFFER_BINDING, std430) readonly restrict buffer ModelColourBuffer {
+    uint colourData[];
+};
+#endif
+
+#ifdef POSITION_SCRATCH_BINDING
+#ifndef POSITION_SCRATCH_ACCESS
+#define POSITION_SCRATCH_ACCESS readonly
+#endif
+layout(binding = POSITION_SCRATCH_BINDING, std430) POSITION_SCRATCH_ACCESS restrict buffer PositionScratchBuffer {
+    uvec2 positionBuffer[];
+};
+#endif
+
+#ifndef _VOXY_LIGHTING_DECL
+#define _VOXY_LIGHTING_DECL
+
+vec2 getLightmapUv(uint index) {
+    vec2 base = vec2((index>>4)&0xFu, index&0xFu)/15;
+
+    return clamp(base*(15.0f/16.0f)+(0.5/16.0f), vec2(8.0f/256), vec2(248.0f/256));//+vec2(8.0f/256)
+}
+
+#ifdef LIGHTING_SAMPLER_BINDING
+
+layout(binding = LIGHTING_SAMPLER_BINDING) uniform sampler2D lightSampler;
+
+vec4 getLighting(uint index) {
+    return texture(lightSampler, getLightmapUv(index));
+}
+#endif
+
+#endif
+
+
+//These defines are definatly going to break some shaders somehow
+
+#ifndef UNDEFINE_DEPTH
+#define UNDEFINE_DEPTH
+
+#ifdef USE_REVERSE_Z
+#define REDUCTION min
+#define REDUCTION2 max
+#define NEAR 1.0f
+#define FAR 0.0f
+#define CLOSER_SIGN 1.0f
+#define DEPTH_SCALAR_COMPARE(a,b) ((a)>(b))
+#define DEPTH_SCALAR_COMPARE_EQUAL(a,b) ((a)>=(b))
+#else
+#define REDUCTION max
+#define REDUCTION2 min
+#define NEAR 0.0f
+#define FAR 1.0f
+#define CLOSER_SIGN -1.0f
+#define DEPTH_SCALAR_COMPARE(a,b) ((a)<(b))
+#define DEPTH_SCALAR_COMPARE_EQUAL(a,b) ((a)<=(b))
+#endif
+
+
+
+#ifdef USE_ZERO_ONE_DEPTH
+vec3 NDC2SCREEN(vec3 val) {
+    return vec3(val.xy*0.5f+0.5f, val.z);
+}
+vec3 SCREEN2NDC(vec3 val) {
+    return vec3(val.xy*2.0f-1.0f, val.z);
+}
+float NDC2SCREEN_DEPTH(float val) {
+    return val;
+}
+float SCREEN2NDC_DEPTH(float val) {
+    return val;
+}
+#else
+vec3 NDC2SCREEN(vec3 val) {
+    return val*0.5f+0.5f;
+}
+vec3 SCREEN2NDC(vec3 val) {
+    return val*2.0f-1.0f;
+}
+float NDC2SCREEN_DEPTH(float val) {
+    return val*0.5f+0.5f;
+}
+float SCREEN2NDC_DEPTH(float val) {
+    return val*2.0f-1.0f;
+}
+#endif
+
+
+#else
+#undef UNDEFINE_DEPTH
+
+#undef REDUCTION
+#undef REDUCTION2
+#undef NEAR
+#undef FAR
+#undef CLOSER_SIGN
+#undef DEPTH_SCALAR_COMPARE
+#undef DEPTH_SCALAR_COMPARE_EQUAL
+#undef USE_ZERO_ONE_DEPTH
+
+#endif
+
+
+vec4 uint2vec4RGBA(uint colour) {
+    return vec4((uvec4(colour)>>uvec4(24,16,8,0))&uvec4(0xFF))/255.0;
+}
+
+//bool useMipmaps() {
+//    return (interData.x&2u)==0u;
+//}
+
+uint tintingState() {
+    return (interData.x>>2)&3u;
+}
+
+bool useDiscard() {
+    return (interData.x&1u)==1u;
+}
+
+uint getFace() {
+    return (interData.x>>4)&7u;
+}
+
+
+uint getModelId() {
+    return interData.x>>16;
+}
+
+vec2 getBaseUV() {
+    uint face = getFace();
+    uint modelId = interData.x>>16;
+    vec2 modelUV = vec2(modelId&0xFFu, (modelId>>8)&0xFFu)*(1.0/(256.0));
+    return modelUV + (vec2(face>>1, face&1u) * (1.0/(vec2(3.0, 2.0)*256.0)));
+}
+
+
+#ifdef PATCHED_SHADER
+struct VoxyFragmentParameters {
+    //TODO: pass in derivative data
+    vec4 sampledColour;
+    vec2 tile;
+    vec2 uv;
+    uint face;
+    uint modelId;
+    vec2 lightMap;
+    vec4 tinting;
+    uint customId;//Same as iris's modelId
+};
+
+void voxy_emitFragment(VoxyFragmentParameters parameters);
+#else
+
+vec4 computeColour(vec2 texturePos, vec4 colour) {
+    //Conditional tinting, TODO: FIXME: this is better but still not great, try encode data into the top bit of alpha so its per pixel
+
+    uint tintingFunction = tintingState();
+    bool doTint = tintingFunction==2;//Always tint if function == 2
+    if (tintingFunction == 1) {//partial tint
+        vec4 tintTest = textureLod(blockModelAtlas, texturePos, 0);
+        if (abs(tintTest.r-tintTest.g) < 0.02f && abs(tintTest.g-tintTest.b) < 0.02f) {
+            doTint = true;
+        }
+    }
+    if (doTint) {
+        colour *= uint2vec4RGBA(interData.z).yzwx;
+    }
+    return (colour * uint2vec4RGBA(interData.y)) + vec4(0,0,0,float(interData.w&0xFFu)/255);
+}
+
+#endif
+
+
+void main() {
+    //vec2 uv = vec2(0);
+    //Tile is the tile we are in
+    vec2 tile;
+    #ifdef USE_NV_BARRY
+    #ifdef USE_SINGLE_TRI
+    if (gl_BaryCoordNV.x>=0.5||gl_BaryCoordNV.y>=0.5) discard;
+    vec2 uv = gl_BaryCoordNV.yx*(vec2((interData.x>>8)&0xFu, (interData.x>>12)&0xFu)+1)*2;
+    #else
+    vec2 uv = mix(gl_BaryCoordNV.yx, 1-gl_BaryCoordNV.xz, gl_PrimitiveID&1)*(vec2((interData.x>>8)&0xFu, (interData.x>>12)&0xFu)+1);
+    #endif
+    #endif
+
+    vec2 uv2 = modf(uv, tile)*(1.0/(vec2(3.0,2.0)*256.0));
+    vec4 colour;
+    vec2 texPos = uv2 + getBaseUV();
+//This is deprecated, TODO: remove the non mip code path
+    //if (useMipmaps())
+    {
+        vec2 uvSmol = uv*(1.0/(vec2(3.0,2.0)*256.0));
+        vec2 dx = dFdx(uvSmol);//vec2(lDx, dDx);
+        vec2 dy = dFdy(uvSmol);//vec2(lDy, dDy);
+        colour = textureGrad(blockModelAtlas, texPos, dx, dy);
+    }// else {
+    //    colour = textureLod(blockModelAtlas, texPos, 0);
+    //}
+
+    //If we are in shaders and are a helper invocation, just exit, as it enables extra performance gains for small sized
+    // fragments, we do this here after derivative computation
+    //Trying it with all shaders
+    //#ifdef PATCHED_SHADER
+    #ifndef PATCHED_SHADER_ALLOW_DERIVATIVES
+    if (gl_HelperInvocation) {
+        return;
+    }
+    #endif
+    //#endif
+
+    if (any(notEqual(clamp(tile, vec2(0), vec2((interData.x>>8)&0xFu, (interData.x>>12)&0xFu)), tile))) {
+        discard;
+        return;
+    }
+
+    //Check the minimum bounding texture and ensure we are greater than it
+    if (DEPTH_SCALAR_COMPARE(gl_FragCoord.z, texelFetch(depthTex, ivec2(gl_FragCoord.xy), 0).r)) {
+        discard;
+        return;
+    }
+
+
+    //Also, small quad is really fking over the mipping level somehow
+    #ifndef TRANSLUCENT
+    colour.a = 1.0f;
+    if (useDiscard() && (textureLod(blockModelAtlas, texPos, 0).a <= 0.1f)) {
+    //if (useDiscard() && (colour.a <= 0.1f)) {
+    #else
+    if (textureLod(blockModelAtlas, texPos, 0).a == 0.0f) {
+    #endif
+        //This is stupidly stupidly bad for divergence
+        //TODO: FIXME, basicly what this do is sample the exact pixel (no lod) for discarding, this stops mipmapping fucking it over
+        #ifndef DEBUG_RENDER
+        discard;
+        return;
+        #endif
+    }
+
+    #ifndef PATCHED_SHADER_ALLOW_DERIVATIVES
+    if (gl_HelperInvocation) {
+        return;
+    }
+    #endif
+
+    #ifndef PATCHED_SHADER
+    colour = computeColour(texPos, colour);
+    outColour = colour;
+
+    #ifdef DEBUG_RENDER
+    uint hash = quadDebug*1231421+123141;
+    hash ^= hash>>16;
+    hash = hash*1231421+123141;
+    hash ^= hash>>16;
+    hash = hash * 1827364925 + 123325621;
+    outColour = vec4(float(hash&15u)/15, float((hash>>4)&15u)/15, float((hash>>8)&15u)/15, 0);
+    #endif
+
+    #else
+    uint modelId = getModelId();
+    BlockModel model = modelData[modelId];
+    uint tintingFunction = tintingState();
+    bool doTint = tintingFunction==2;//Always tint if function == 2
+    if (tintingFunction==1) {//Partial tint
+        vec4 tintTest = texture(blockModelAtlas, texPos, -2);
+        if (abs(tintTest.r-tintTest.g) < 0.02f && abs(tintTest.g-tintTest.b) < 0.02f) {
+            doTint = true;
+        }
+    }
+    vec4 tint = vec4(1);
+    if (doTint) {
+        tint = uint2vec4RGBA(interData.z).yzwx;
+    }
+
+    uint face = getFace();
+    face ^= uint((face&1u)!=uint(gl_FrontFacing!=((face>>1)!=0u)));
+    voxy_emitFragment(VoxyFragmentParameters(colour, tile, texPos, face, modelId, getLightmapUv(interData.y), tint, model.customId));
+
+    #endif
+}
+
+
+
+//#ifdef GL_KHR_shader_subgroup_quad
+/*
+uint hash = (uint(tile.x)*(1<<16))^uint(tile.y);
+uint horiz = subgroupQuadSwapHorizontal(hash);
+bool sameTile = horiz==hash;
+uint sv = mix(uint(-1), hash, sameTile);
+uint vert = subgroupQuadSwapVertical(sv);
+sameTile = sameTile&&vert==hash;
+mipBias = sameTile?0:-5.0;
+*/
+/*
+vec2 uvSmol = uv*(1.0/(vec2(3.0,2.0)*256.0));
+float lDx = subgroupQuadSwapHorizontal(uvSmol.x)-uvSmol.x;
+float lDy = subgroupQuadSwapVertical(uvSmol.y)-uvSmol.y;
+float dDx = subgroupQuadSwapDiagonal(lDx);
+float dDy = subgroupQuadSwapDiagonal(lDy);
+vec2 dx = vec2(lDx, dDx);
+vec2 dy = vec2(lDy, dDy);
+colour = textureGrad(blockModelAtlas, texPos, dx, dy);
+*/
+//#else
+//colour = texture(blockModelAtlas, texPos);
+//#endif
+
+//Undefine the depth stuff
+//These defines are definatly going to break some shaders somehow
+
+#ifndef UNDEFINE_DEPTH
+#define UNDEFINE_DEPTH
+
+#ifdef USE_REVERSE_Z
+#define REDUCTION min
+#define REDUCTION2 max
+#define NEAR 1.0f
+#define FAR 0.0f
+#define CLOSER_SIGN 1.0f
+#define DEPTH_SCALAR_COMPARE(a,b) ((a)>(b))
+#define DEPTH_SCALAR_COMPARE_EQUAL(a,b) ((a)>=(b))
+#else
+#define REDUCTION max
+#define REDUCTION2 min
+#define NEAR 0.0f
+#define FAR 1.0f
+#define CLOSER_SIGN -1.0f
+#define DEPTH_SCALAR_COMPARE(a,b) ((a)<(b))
+#define DEPTH_SCALAR_COMPARE_EQUAL(a,b) ((a)<=(b))
+#endif
+
+
+
+#ifdef USE_ZERO_ONE_DEPTH
+vec3 NDC2SCREEN(vec3 val) {
+    return vec3(val.xy*0.5f+0.5f, val.z);
+}
+vec3 SCREEN2NDC(vec3 val) {
+    return vec3(val.xy*2.0f-1.0f, val.z);
+}
+float NDC2SCREEN_DEPTH(float val) {
+    return val;
+}
+float SCREEN2NDC_DEPTH(float val) {
+    return val;
+}
+#else
+vec3 NDC2SCREEN(vec3 val) {
+    return val*0.5f+0.5f;
+}
+vec3 SCREEN2NDC(vec3 val) {
+    return val*2.0f-1.0f;
+}
+float NDC2SCREEN_DEPTH(float val) {
+    return val*0.5f+0.5f;
+}
+float SCREEN2NDC_DEPTH(float val) {
+    return val*2.0f-1.0f;
+}
+#endif
+
+
+#else
+#undef UNDEFINE_DEPTH
+
+#undef REDUCTION
+#undef REDUCTION2
+#undef NEAR
+#undef FAR
+#undef CLOSER_SIGN
+#undef DEPTH_SCALAR_COMPARE
+#undef DEPTH_SCALAR_COMPARE_EQUAL
+#undef USE_ZERO_ONE_DEPTH
+
+#endif
+
+
+
+layout(binding = 7, std140) uniform ShaderUniformBindings {
+	mat4 vxProj;
+	mat4 gbufferModelView;
+	mat4 gbufferPreviousModelView;
+	mat4 gbufferProjection;
+	mat4 gbufferPreviousProjection;
+	mat4 vxProjPrev;
+	mat4 gbufferModelViewInverse;
+	mat4 gbufferProjectionInverse;
+	mat4 vxProjInv;
+	vec3 cameraPosition;
+	float rainyStrength;
+	vec2 taaOffsetVX;
+	vec2 texelSize;
+	vec2 screenSize;
+	int vxRenderDistance;
+	int frameCounter;
+	float weatherStrength;
+	float far;
+	float frameTimeCounter;
+	float rainStrength;
+};
+
+#define BASE_SAMPLER_BINDING_INDEX 6
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+0)) uniform sampler2D gaux2;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+1)) uniform sampler2D vxDepthTexOpaque;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+2)) uniform sampler2D vxDepthTexTrans;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+3)) uniform sampler2D gtexture;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+4)) uniform sampler2D normals;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+5)) uniform sampler2D depthtex0;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+6)) uniform sampler2D depthtex1;
+layout(binding=(BASE_SAMPLER_BINDING_INDEX+7)) uniform sampler2D noisetex;
+
+
+
+
+//     _________      __        __     ___       __     __________      ________        ______        __           
+//    /  _____  \    |  |      |  |   |   \     |  |   |   _____  \    |__    __|      /  __  \      |  |          
+//   /  /     \__\   |  |      |  |   |    \    |  |   |  |     \  \      |  |        /  /  \  \     |  |          
+//  |  |             |  |      |  |   |  |  \   |  |   |  |      |  |     |  |       /  /    \  \    |  |          
+//   \  \______      |  |      |  |   |  |\  \  |  |   |  |      |  |     |  |      |  |______|  |   |  |          
+//    \______  \     |  |      |  |   |  | \  \ |  |   |  |      |  |     |  |      |   ______   |   |  |          
+//           \  \    |  |      |  |   |  |  \  \|  |   |  |      |  |     |  |      |  |      |  |   |  |          
+//  ___       |  |   |  |      |  |   |  |   \  |  |   |  |      |  |     |  |      |  |      |  |   |  |          
+//  \  \_____/  /     \  \____/  /    |  |    \    |   |  |_____/  /    __|  |__    |  |      |  |   |  |_________ 
+//   \_________/       \________/     |__|     \___|   |__________/    |________|   |__|      |__|   |____________|
+//
+//  General Public License v3.0. Copyright (C) 2026 GeForceLegend.
+//  https://github.com/GeForceLegend/Sundial-Lite
+//  https://www.gnu.org/licenses/gpl-3.0.en.html
+//
+//  Gbuffer for Voxy transparent terrain
+//
+
+layout(location = 0) out vec4 gbufferData0;
+layout(location = 1) out vec4 gbufferData1;
+layout(location = 2) out vec4 gbufferData2;
+
+const float PI = 3.1415926535897;
+
+vec2 taaOffset = vec2(0.0);
+
+uniform sampler2D colortex0;
+uniform sampler2D colortex1;
+uniform sampler2D colortex2;
+
+
+
+
+
+// Texture Settings
+    
+    // Plant Wave
+        
+        
+        
+        
+    // Specular
+        
+        
+        
+        
+        
+        
+        
+        
+//        // #define LABPBR_TEXTURE_AO
+    // Normal and Parallax
+    
+        // Normal
+            
+            
+//            // #define SMOOTH_NORMAL
+//            // #define PARALLAX_BASED_NORMAL
+            
+            
+        // Parallax
+//            // #define PARALLAX
+            
+//            // #define VOXEL_PARALLAX
+            
+            
+            
+    
+    
+    // Water
+        
+        
+        
+
+// Shadow
+    
+    const float distortionStrength = exp(4.0) - 1.0;
+//    // #define CLOUD_SHADOW
+    
+    
+    
+
+// Lighting
+    
+
+ 
+    
+    
+    
+    
+    
+    
+    
+    const vec3 commonLightColor = vec3(0.6, 0.4, 0.2) * 1.0;
+    // Visibility bitmask
+        
+
+// Screen Space Reflection
+    
+//    // #define FULL_REFLECTION
+    
+
+// Atmosphere
+    
+    
+    
+    // Fog
+
+
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+    // Rain Fog
+        
+        
+        
+        
+
+// Post Processing
+    
+//    #define MOTION_BLUR
+    // Depth of Field
+        
+        
+        const float centerDepthHalflife = 1.0; // [0.1 0.2 0.3 0.4 0.5 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 2.3 2.6 2.9 3.2 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0 8.5 9.0 9.5 10.0 11.0 12.0 13.0 14.0 15.0 16.0 18.0 20.0 22.0 24.0 27.0 30.0 35.0 40.0 45.0 50.0 55.0 60.0 65.0 70.0 80.0 90.0 100.0 110.0 120.0 130.0 140.0 160.0 180.0 200.0 250.0 300.0 400.0 500.0]
+
+// Weather
+    
+    
+    
+    
+    
+    
+
+ 
+//// #define TEMPORAL_IGNORE_HAND_ANIMATION
+
+//// #define UNDERGROUND_MODE
+
+
+    
+        
+    
+
+
+
+    
+
+
+// HelianMMCO
+    
+    
+    
+    
+    
+    
+    
+    
+    
+//AgX_PURE
+
+
+
+
+
+
+
+
+
+
+//End_Color
+    
+    
+    
+    
+
+
+
+
+
+
+
+
+    mat4 projLod() {
+        
+            
+        
+        
+            return vxProj;
+        
+        return gbufferProjection;
+    }
+
+    mat4 projInvLod() {
+        
+            
+        
+        
+            return vxProjInv;
+        
+        return gbufferProjectionInverse;
+    }
+
+    mat4 projPrevLod() {
+        
+            
+        
+        
+            return vxProjPrev;
+        
+        return gbufferPreviousProjection;
+    }
+
+    float lodRenderDistance() {
+        
+            
+        
+        
+            return vxRenderDistance * 16.0;
+        
+        return far;
+    }
+
+    float getLodDepthSolid(vec2 coord) {
+        
+            
+        
+        
+            return textureLod(vxDepthTexOpaque, coord, 0.0).x;
+        
+        return textureLod(depthtex1, coord, 0.0).x;
+    }
+
+    float getLodDepthSolidDeferred(vec2 coord) {
+        
+            
+        
+        
+            return textureLod(vxDepthTexOpaque, coord, 0.0).x;
+        
+        return textureLod(depthtex0, coord, 0.0).x;
+    }
+
+    float getLodDepthWater(vec2 coord) {
+        
+            
+        
+        
+            return textureLod(vxDepthTexTrans, coord, 0.0).x;
+        
+        return textureLod(depthtex0, coord, 0.0).x;
+    }
+
+    vec3 screenToViewPosLod(vec2 coord, float depth) {
+        vec3 projPos = vec3(coord.xy, depth) * 2.0 - 1.0;
+        
+            projPos.xy -= taaOffset;
+        
+        vec3 viewDirection = vec3(vec2(projInvLod()[0].x, projInvLod()[1].y) * projPos.xy, projInvLod()[3].z);
+        viewDirection.xy += vec2(projInvLod()[3].xy);
+        float viewDepth = projInvLod()[2].w * projPos.z + projInvLod()[3].w;
+        return viewDirection / viewDepth;
+    }
+
+    vec3 projectionToViewPosLod(vec3 projPos) {
+        vec3 viewDirection = vec3(vec2(projInvLod()[0].x, projInvLod()[1].y) * projPos.xy, projInvLod()[3].z);
+        viewDirection.xy += vec2(projInvLod()[3].xy);
+        float viewDepth = projInvLod()[2].w * projPos.z + projInvLod()[3].w;
+        return viewDirection / viewDepth;
+    }
+
+    vec3 viewToProjectionPosLod(vec3 viewPos) {
+        return -(vec3(projLod()[0].x, projLod()[1].y, projLod()[2].z) * viewPos + projLod()[3].xyz) / viewPos.z;
+    }
+
+    vec3 prevProjectionToViewPosLod(vec3 projPos) {
+        projPos.xy += projPrevLod()[2].xy;
+        projPos.x /= projPrevLod()[0].x;
+        projPos.y /= projPrevLod()[1].y;
+        projPos.z = projPrevLod()[3].z / (projPos.z + projPrevLod()[2].z);
+        return vec3(projPos.xy * projPos.z, -projPos.z);
+    }
+
+    vec3 prevViewToProjectionPosLod(vec3 viewPos) {
+        vec3 projPos = vec3(projPrevLod()[0].x, projPrevLod()[1].y, projPrevLod()[2].z) * viewPos;
+        projPos.xy += projPrevLod()[2].xy * viewPos.z;
+        projPos.z += projPrevLod()[3].z;
+        return -projPos / viewPos.z;
+    }
+
+    float screenToViewDepthLod(float depth) {
+        depth = depth * 2.0 - 1.0;
+        return 1.0 / (depth * projInvLod()[2].w + projInvLod()[3].w);
+    }
+
+    float viewToScreenDepthLod(float depth) {
+        depth = (1.0 / depth - projInvLod()[3].w) / projInvLod()[2].w;
+        return depth * 0.5 + 0.5;
+    }
+
+
+struct GbufferData {
+    vec4 albedo;
+    vec3 normal;
+    vec3 geoNormal;
+    vec2 lightmap;
+    float smoothness;
+    float metalness;
+    float porosity;
+    float emissive;
+    float materialID;
+    float parallaxOffset;
+    float depth;
+};
+
+mat3 rotation(vec4 quaternion) {
+    float w2 = quaternion.w * quaternion.w;
+    float x2 = quaternion.x * quaternion.x;
+    float y2 = quaternion.y * quaternion.y;
+    float z2 = quaternion.z * quaternion.z;
+    float zw = quaternion.z * quaternion.w;
+    float xy = quaternion.x * quaternion.y;
+    float xz = quaternion.x * quaternion.z;
+    float yw = quaternion.y * quaternion.w;
+    float yz = quaternion.y * quaternion.z;
+    float xw = quaternion.x * quaternion.w;
+    float dzw = 2.0 * zw;
+    float dxy = 2.0 * xy;
+    float dxz = 2.0 * xz;
+    float dyw = 2.0 * yw;
+    float dyz = 2.0 * yz;
+    float dxw = 2.0 * xw;
+    return mat3(
+        w2 + x2 - z2 - y2, dxy + dzw, dxz - dyw,
+        -dzw + dxy, y2 - z2 + w2 - x2, dyz + dxw,
+        dyw + dxz, dyz - dxw, z2 - y2 - x2 + w2
+    );
+}
+
+vec2 encodeNormal(vec3 normal) {
+    normal.xy /= dot(vec3(1.0), abs(normal));
+    float useInv = clamp(normal.z * -1e+10, 0.0, 1.0);
+    vec2 normalInv = uintBitsToFloat(floatBitsToUint(vec2(1.0) - abs(normal.yx)) ^ (floatBitsToUint(normal.xy) & 0x80000000u));
+    normal.xy = mix(normal.xy, normalInv, vec2(useInv));
+    return normal.xy;
+}
+
+vec3 decodeNormal(vec2 data) {
+    vec3 normal = vec3(data, 1.0 - abs(data.x) - abs(data.y));
+    float useInv = clamp(normal.z * -1e+10, 0.0, 1.0);
+    vec2 normalInv = uintBitsToFloat(floatBitsToUint(vec2(1.0) - abs(normal.yx)) ^ (floatBitsToUint(normal.xy) & 0x80000000u));
+    normal.xy = mix(normal.xy, normalInv, vec2(useInv));
+    return normalize(normal);
+}
+
+void decodeNormals(vec4 rawData, inout vec3 normal, inout vec3 geoNormal) {
+    vec2 normalZ = vec2(1.0) - abs(rawData.xz) - abs(rawData.yw);
+    vec2 useInv = clamp(normalZ * -1e+10, vec2(0.0), vec2(1.0));
+    vec4 normalInv = uintBitsToFloat(floatBitsToUint(vec4(1.0) - abs(rawData.yxwz)) ^ (floatBitsToUint(rawData) & 0x80000000u));
+    rawData = mix(rawData, normalInv, vec4(vec2(useInv.x), vec2(useInv.y)));
+    normal = normalize(vec3(rawData.xy, normalZ.x));
+    geoNormal = normalize(vec3(rawData.zw, normalZ.y));
+}
+
+float pack2x8Bit(vec2 x) {
+    x = clamp(x, 0.0, 1.0);
+    x = x * vec2(255.0 / 256.0) + vec2(256.5 / 256.0);
+    uvec2 u = floatBitsToUint(x);
+    uint p = (u.x & 0xFFFF8000u) + ((u.y & 0x007F8000u) >> 8) + 0x00000020u;
+    return clamp(uintBitsToFloat(p) * 65536.0 / 65535.0 - 65536.0 / 65535.0, 0.0, 1.0);
+}
+
+vec2 unpack2x8Bit(float x) {
+    uint u = floatBitsToUint(x * 65535.0 / 65536.0 + 65536.5 / 65536.0);
+    uvec2 p = (uvec2(u, u << 8) & 0x007F8000u) | 0x3F800000u;
+    return uintBitsToFloat(p) * 256.0 / 255.0 - 256.0 / 255.0;
+}
+
+float packM3P13(vec2 x) {
+    x = clamp(x, 0.0, 1.0);
+    x = x * vec2(7.0 / 8.0, 8191.0 / 8192.0) + vec2(8.5 / 8.0, 8192.5 / 8192.0);
+    uvec2 u = floatBitsToUint(x);
+    uint p = (u.x & 0xFFF00000u) + ((u.y & 0x007FFC00u) >> 3) + 0x00000020u;
+    return clamp(uintBitsToFloat(p) * 65536.0 / 65535.0 - 65536.0 / 65535.0, 0.0, 1.0);
+}
+
+vec2 unpackM3P13(float x) {
+    uint u = floatBitsToUint(x * 65535.0 / 65536.0 + 65536.5 / 65536.0);
+    uvec2 p = (uvec2(u, u << 3) & uvec2(0x00700000u, 0x007FFC00u)) | 0x3F800000u;
+    return uintBitsToFloat(p) * vec2(8.0 / 7.0, 8192.0 / 8191.0) - vec2(8.0 / 7.0, 8192.0 / 8191.0);
+}
+
+uint pack2x16Bit(vec2 x) {
+    x = clamp(x, 0.0, 1.0);
+    x = x * vec2(65535.0 / 65536.0) + vec2(65536.5 / 65536.0);
+    uvec2 u = floatBitsToUint(x);
+    uvec2 p = u & 0x007FFF80u;
+    return (p.x >> 7) | (p.y << 9);
+}
+
+vec2 unpack2x16Bit(uint x) {
+    uvec2 p = (uvec2(x << 7, x >> 9) & 0x007FFF80u) | 0x3F800000u;
+    return uintBitsToFloat(p) * 65536.0 / 65535.0 - 65536.0 / 65535.0;
+}
+
+uint packF8D24(float frames, float depth) {
+    frames = clamp(frames / 256.0, 0.0, 1.0);
+    uint uFrames = (floatBitsToUint(frames + 1.0) << 9) & 0xFF000000u;
+    uint uDepth = floatBitsToUint(abs(depth) + 1.0) & 0x007FFFFEu;
+    uDepth += floatBitsToUint(depth) >> 31;
+    return uFrames + uDepth;
+}
+
+vec2 unpackF8D24(uint x) {
+    float frames = uintBitsToFloat(((x & 0xFF000000u) >> 9) | 0x3F800000u) * 256.0 - 256.0;
+    uint signDepth = (x << 31) | 0x3F800000u;
+    float depth = uintBitsToFloat((x & 0x007FFFFEu) | signDepth) - uintBitsToFloat(signDepth);
+    return vec2(frames, depth);
+}
+
+void LabPBR(inout GbufferData dataSet, vec4 specularData) {
+    dataSet.smoothness = specularData.r;
+    dataSet.metalness = specularData.g;
+    dataSet.porosity = specularData.b;
+    dataSet.emissive = specularData.a * step(specularData.a, 0.999);
+}
+
+void ClassicPBR(inout GbufferData dataSet, vec4 specularData) {
+    dataSet.smoothness = specularData.r;
+    dataSet.metalness = specularData.g;
+    dataSet.porosity = 0.0;
+    dataSet.emissive = specularData.b;
+}
+
+void BedrockRTX(inout GbufferData dataSet, vec4 specularData) {
+    dataSet.smoothness = 1.0 - specularData.b;
+    dataSet.metalness = specularData.r;
+    dataSet.porosity = 0.0;
+    dataSet.emissive = specularData.g;
+}
+
+vec3 LabPBR(vec3 rawNormal) {
+    vec3 normal = rawNormal * 2.0 - 1.0;
+    normal.z = sqrt(clamp(1.0 - dot(normal.xy, normal.xy), 0.0, 1.0));
+    normal.xy = uintBitsToFloat(floatBitsToUint(clamp(abs(normal.xy) - 1.0 / 255.0, 0.0, 1.0)) | (floatBitsToUint(normal.xy) & 0x80000000u));
+    return normal;
+}
+
+vec3 ClassicPBR(vec3 rawNormal) {
+    vec3 normal = rawNormal * 2.0 - 1.0;
+    normal.xy = uintBitsToFloat(floatBitsToUint(clamp(abs(normal.xy) - 1.0 / 255.0, 0.0, 1.0)) | (floatBitsToUint(normal.xy) & 0x80000000u));
+    return normal;
+}
+
+vec3 getNormalTexel(ivec2 texel) {
+    vec2 rawData = texelFetch(colortex1, texel, 0).xy;
+    return decodeNormal(rawData);
+}
+
+vec3 getGeoNormalTexel(ivec2 texel) {
+    vec2 rawData = texelFetch(colortex1, texel, 0).zw;
+    return decodeNormal(rawData);
+}
+
+float getSolidDepth(vec2 coord) {
+    return textureLod(depthtex1, coord, 0.0).x;
+}
+
+float getWaterDepth(vec2 coord) {
+    return textureLod(depthtex0, coord, 0.0).x;
+}
+
+void packUpGbufferDataSolid(in GbufferData rawData, out vec4 data0, out vec4 data1, out vec4 data2) {
+    // colortex0 RGBA8
+    data0 = rawData.albedo;
+
+    // colortex1 RGBA16
+    data1 = vec4(encodeNormal(rawData.normal), encodeNormal(rawData.geoNormal));
+
+    // colortex2 RGBA16
+    data2 = vec4(
+        pack2x8Bit(vec2(rawData.lightmap.x, rawData.lightmap.y)),
+        pack2x8Bit(vec2(rawData.smoothness, rawData.metalness)),
+        pack2x8Bit(vec2(rawData.porosity, rawData.emissive)),
+        packM3P13(vec2(rawData.materialID / 7.0, rawData.parallaxOffset))
+    );
+}
+
+GbufferData getGbufferData(ivec2 texel, vec2 coord) {
+    vec4 tex0 = texelFetch(colortex0, texel, 0);
+    vec4 tex1 = texelFetch(colortex1, texel, 0);
+    vec4 tex2 = texelFetch(colortex2, texel, 0);
+
+    vec2 unpacked2g = unpack2x8Bit(tex2.g);
+    vec2 unpacked2b = unpack2x8Bit(tex2.b);
+    vec2 unpacked2a = unpackM3P13(tex2.a);
+
+    GbufferData data;
+
+    data.albedo = tex0;
+    data.albedo.rgb = pow(data.albedo.rgb, vec3(2.2));
+    decodeNormals(tex1, data.normal, data.geoNormal);
+    data.lightmap = unpack2x8Bit(tex2.r);
+
+    data.smoothness = unpacked2g.x;
+    data.metalness = unpacked2g.y;
+    data.porosity = unpacked2b.x;
+    data.emissive = unpacked2b.y;
+
+    data.materialID = round(unpacked2a.x * 7.0);
+    data.parallaxOffset = unpacked2a.y;
+
+    data.depth = textureLod(depthtex1, coord, 0.0).x;
+
+    return data;
+}
+
+vec3 screenToViewPos(vec2 coord, float depth) {
+    vec3 projPos = vec3(coord.xy, depth) * 2.0 - 1.0;
+    
+        projPos.xy -= taaOffset;
+    
+    vec3 viewDirection = vec3(vec2(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y) * projPos.xy, gbufferProjectionInverse[3].z);
+    viewDirection.xy += gbufferProjectionInverse[3].xy;
+    float viewDepth = gbufferProjectionInverse[2].w * projPos.z + gbufferProjectionInverse[3].w;
+    return viewDirection / viewDepth;
+}
+
+vec3 projectionToViewPos(vec3 projPos) {
+    vec3 viewDirection = vec3(vec2(gbufferProjectionInverse[0].x, gbufferProjectionInverse[1].y) * projPos.xy, gbufferProjectionInverse[3].z);
+    viewDirection.xy += gbufferProjectionInverse[3].xy;
+    float viewDepth = gbufferProjectionInverse[2].w * projPos.z + gbufferProjectionInverse[3].w;
+    return viewDirection / viewDepth;
+}
+
+vec3 viewToProjectionPos(vec3 viewPos) {
+    vec3 projPos = vec3(gbufferProjection[0].x, gbufferProjection[1].y, gbufferProjection[2].z) * viewPos;
+    projPos.z += gbufferProjection[3].z;
+    projPos.xy += gbufferProjection[2].xy * viewPos.z;
+    return -projPos / viewPos.z;
+}
+
+vec3 viewToWorldPos(vec3 viewPos) {
+    return mat3(gbufferModelViewInverse) * viewPos + gbufferModelViewInverse[3].xyz;
+}
+
+vec3 worldToViewPos(vec3 worldPos) {
+    return mat3(gbufferModelView) * worldPos + gbufferModelView[3].xyz;
+}
+
+vec3 prevProjectionToViewPos(vec3 projPos) {
+    projPos.xy += gbufferPreviousProjection[2].xy;
+    projPos.x /= gbufferPreviousProjection[0].x;
+    projPos.y /= gbufferPreviousProjection[1].y;
+    projPos.z = gbufferPreviousProjection[3].z / (projPos.z + gbufferPreviousProjection[2].z);
+    return vec3(projPos.xy * projPos.z, -projPos.z);
+}
+
+vec3 prevViewToProjectionPos(vec3 viewPos) {
+    vec3 projPos = vec3(gbufferPreviousProjection[0].x, gbufferPreviousProjection[1].y, gbufferPreviousProjection[2].z) * viewPos;
+    projPos.xy += gbufferPreviousProjection[2].xy * viewPos.z;
+    projPos.z += gbufferPreviousProjection[3].z;
+    return -projPos / viewPos.z;
+}
+
+vec3 prevViewToWorldPos(vec3 viewPos) {
+    return (viewPos - gbufferPreviousModelView[3].xyz) * mat3(gbufferPreviousModelView);
+}
+
+vec3 prevWorldToViewPos(vec3 worldPos) {
+    return mat3(gbufferPreviousModelView) * worldPos + gbufferPreviousModelView[3].xyz;
+}
+
+float screenToViewDepth(float depth) {
+    depth = depth * 2.0 - 1.0;
+    return 1.0 / (depth * gbufferProjectionInverse[2].w + gbufferProjectionInverse[3].w);
+}
+
+float viewToScreenDepth(float depth) {
+    depth = (1.0 / depth - gbufferProjectionInverse[3].w) / gbufferProjectionInverse[2].w;
+    return depth * 0.5 + 0.5;
+}
+
+uvec2 projIntersection(vec4 origin, vec4 direction, vec2 targetCoord) {
+    return floatBitsToUint((targetCoord * origin.ww - origin.xy) / (direction.xy - targetCoord * direction.ww));
+}
+
+float projIntersectionScreenEdge(vec4 origin, vec4 direction) {
+    uvec2 intersectionAA = projIntersection(origin, direction, vec2(1.0));
+    uvec2 intersectionBB = projIntersection(origin, direction, vec2(-1.0));
+    uint intersection = min(min(intersectionAA.x, intersectionAA.y), min(intersectionBB.x, intersectionBB.y));
+    float depthLimit = far;
+    
+        depthLimit = lodRenderDistance() * 1.01;
+    
+    intersection = min(intersection, floatBitsToUint(depthLimit + 32.0));
+    return uintBitsToFloat(intersection);
+}
+struct Ray {
+    vec3 origin;
+    vec3 direction;
+    vec3 dirInv;
+    vec3 dirSigned;
+};
+
+float pow2(float a) {
+    return a * a;
+}
+
+vec2 pow2(vec2 a) {
+    return a * a;
+}
+
+vec3 pow2(vec3 a) {
+    return a * a;
+}
+
+vec4 pow2(vec4 a) {
+    return a * a;
+}
+
+float signI(float x) {
+    return uintBitsToFloat((floatBitsToUint(x) & 0x80000000u) | 0x3F800000u);
+}
+
+vec2 signI(vec2 x) {
+    return uintBitsToFloat((floatBitsToUint(x) & 0x80000000u) | 0x3F800000u);
+}
+
+vec3 signI(vec3 x) {
+    return uintBitsToFloat((floatBitsToUint(x) & 0x80000000u) | 0x3F800000u);
+}
+
+/// x * sign(y)
+float signMul(float x, float y) {
+    return uintBitsToFloat(floatBitsToUint(x) ^ (floatBitsToUint(y) & 0x80000000u));
+}
+
+vec2 signMul(vec2 x, vec2 y) {
+    return uintBitsToFloat(floatBitsToUint(x) ^ (floatBitsToUint(y) & 0x80000000u));
+}
+
+vec3 signMul(vec3 x, vec3 y) {
+    return uintBitsToFloat(floatBitsToUint(x) ^ (floatBitsToUint(y) & 0x80000000u));
+}
+
+vec4 signMul(vec4 x, vec4 y) {
+    return uintBitsToFloat(floatBitsToUint(x) ^ (floatBitsToUint(y) & 0x80000000u));
+}
+
+vec3 blueNoiseTemporal(vec2 coord) {
+    const vec3 irrationals = vec3(0.447213595, 1.41421356, 1.61803398);
+    vec2 noiseCoord = vec2(coord.st * screenSize) / 64.0;
+    vec3 n = textureLod(noisetex, noiseCoord, 0.0).rgb;
+    n = fract(n + irrationals * (frameCounter & 63));
+    return n;
+}
+
+int bayer2(ivec2 a) {
+    a &= 1;
+    return ((a.x ^ a.y) << 1) + a.y;
+}
+
+float bayer64(vec2 a) {
+    ivec2 ai = ivec2(a);
+    return (
+        (bayer2 (ai >> 5)      ) +
+        (bayer2 (ai >> 4) << 2 ) +
+        (bayer2 (ai >> 3) << 4 ) +
+        (bayer2 (ai >> 2) << 6 ) +
+        (bayer2 (ai >> 1) << 8 ) +
+        (bayer2 (ai     ) << 10)
+    ) * exp2(-12.0);
+}
+
+float bayer64Temporal(vec2 a) {
+    float bayer = bayer64(a);
+    
+        bayer = fract(bayer + (frameCounter & 63) * sqrt(0.4));
+    
+    return bayer;
+}
+
+float smooth2DNoise(vec2 coord) {
+    vec2 whole = floor(coord);
+    vec2 part = coord - whole;
+
+    part *= part * (3.0 / 64.0 - 2.0 / 64.0 * part);
+    coord = whole / 64.0 + part - 1.0 / 128.0;
+
+    return textureLod(noisetex, coord, 0.0).x;
+}
+
+float smooth3DNoise(vec3 position) {
+    position *= 64.0;
+
+    vec3 whole = floor(position);
+    vec3 part = position - whole;
+
+    part *= part * (vec3(vec2(3.0 / 64.0), 3.0) - vec3(vec2(2.0 / 64.0), 2.0) * part);
+
+    vec2 coord = (17.0 / 64.0 * whole.z + 1.0 / 128.0) + whole.xy / 64.0 + part.xy;
+    vec2 noise = textureLod(noisetex, coord, 0.0).yz;
+
+    return mix(noise.x, noise.y, part.z);
+}
+
+float luminanceLiner(vec3 color) {
+    return dot(color.rgb, vec3(0.2125, 0.7154, 0.0721));
+}
+
+float distribution(float NoH2, float roughness) {
+    float r2 = roughness * roughness;
+    float k = r2 / pow2(1.0 + NoH2 * (r2 - 1.0));
+    return k * (1.0 / PI);
+}
+
+float geometry(float NdotV, float NdotL, float a) {
+    vec2 ggx = vec2(NdotL, NdotV);
+    ggx = ggx / (ggx - ggx * a + a);
+    return ggx.x * ggx.y;
+}
+
+// [Kutz et al. 2021, "Novel aspects of the Adobe Standard Material" ]
+vec3 F_AdobeF82(vec3 F0, vec3 F82, float VdotH)
+{
+    const float K = 49.0 / 46656.0;
+    float Fc = pow(1.0 - VdotH, 5.0);
+    vec3 b = (K - K * F82) * (7776.0 + 9031.0 * F0);
+    return clamp(F0 + Fc * ((1.0 - F0) - b * (VdotH - VdotH * VdotH)), 0.0, 1.0);
+}
+
+vec3 fresnel(float LdotH, vec3 f0) {
+    if (f0.x < 0.0) {
+        f0 = vec3(0.02);
+        LdotH = sqrt(clamp(1.777777 * LdotH * LdotH - 0.777777, 0.0, 1.0));
+    }
+    return F_AdobeF82(f0, vec3(1.0), LdotH);
+}
+
+vec3 diffuseAbsorptionWeight(float NdotV, float smoothness, vec3 f0, vec3 f82) {
+    vec3 F = F_AdobeF82(f0, f82, NdotV);
+    F = 1.0 - F * pow(smoothness, 5.0);
+    return F;
+}
+
+vec3 hardcodedMetal(float metalness) {
+    vec3 F82 = vec3(1.0);
+    
+    float materialId = round(metalness * 255.0);
+    // 230 ~ 237, hardcoded metals
+    float isHardcoded = clamp(abs(materialId / 4.0 - 233.5 / 4.0) * 1e+10 - 1e+10, 0.0, 1.0);
+
+    if (isHardcoded < 1e-6) {
+        F82 = vec3(0.0);
+        float isIron = clamp(1e+4 - abs(materialId - 230.0) * 1e+5, 0.0, 1.0);
+        F82 += isIron * vec3(0.8851, 0.8800, 0.8966);
+
+        float isGold = clamp(1e+4 - abs(materialId - 231.0) * 1e+5, 0.0, 1.0);
+        F82 += isGold * vec3(0.9408, 0.9636, 0.9099);
+
+        float isAluminum = clamp(1e+4 - abs(materialId - 232.0) * 1e+5, 0.0, 1.0);
+        F82 += isAluminum * vec3(0.9090, 0.9365, 0.9596);
+
+        float isChrome = clamp(1e+4 - abs(materialId - 233.0) * 1e+5, 0.0, 1.0);
+        F82 += isChrome * vec3(0.7372, 0.7511, 0.8170);
+
+        float isCopper = clamp(1e+4 - abs(materialId - 234.0) * 1e+5, 0.0, 1.0);
+        F82 += isCopper * vec3(0.9755, 0.9349, 0.9301);
+
+        float isLead = clamp(1e+4 - abs(materialId - 235.0) * 1e+5, 0.0, 1.0);
+        F82 += isLead * vec3(0.8095, 0.8369, 0.8739);
+
+        float isPlatinum = clamp(1e+4 - abs(materialId - 236.0) * 1e+5, 0.0, 1.0);
+        F82 += isPlatinum * vec3(0.9501, 0.9464, 0.9352);
+
+        float isSilver = clamp(1e+4 - abs(materialId - 237.0) * 1e+5, 0.0, 1.0);
+        F82 += isSilver * vec3(0.9929, 0.9961, 1.0);
+    }
+    
+    return F82;
+}
+
+vec3 sunlightSpecular(vec3 viewDir, vec3 lightDir, vec3 normal, float smoothness, float NdotL, float NdotV, vec3 f0, vec3 f82) {
+    float LdotV = dot(-viewDir, lightDir);
+    float LdotH2 = LdotV * 0.5 + 0.5;
+    float LdotHInv = inversesqrt(LdotH2);
+    float LdotH = clamp(LdotH2 * LdotHInv, 0.0, 1.0);
+
+    float roughness = pow2((1.0 + 0.03) - smoothness);
+    vec3 reflectDir = viewDir + 2.0 * NdotV * normal;
+    float NdotH2 = clamp(dot(reflectDir, lightDir) * 1.0001 * 0.5 + 0.0001 * 0.5 + 0.5, 0.0, 1.0);
+
+    float D = clamp(distribution(NdotH2, roughness) / 300.0, 0.0, 1.0) * 300.0;
+    float V = geometry(NdotV, NdotL, roughness);
+    if (f0.x < 0.0) {
+        f0 = vec3(0.02);
+        LdotH = sqrt(clamp(1.777777 * LdotH * LdotH - 0.777777, 0.0, 1.0));
+    }
+    vec3 F = F_AdobeF82(f0, f82, LdotH);
+    return D * V * F;
+}
+
+float groundWetStrength(vec3 position, float normalDir, float metalness, float porosity, float outdoor) {
+    position *= 0.004;
+    position.y *= 0.2;
+    float noise = smooth3DNoise(position);
+    float weight = 1.0;
+    float weights = 1.0;
+    for (int i = 0; i < 3; i++) {
+        position = position * 2.8;
+        weight *= 0.45;
+        noise += smooth3DNoise(position) * weight;
+        weights += weight;
+    }
+    noise /= weights;
+    noise = noise * (rainyStrength * 1.0 + porosity * 0.1) + (rainyStrength * 0.4 - porosity * 0.1);
+    
+        metalness = step(229.5 / 255.0, metalness);
+    
+
+    return (1.0 - metalness) * clamp(normalDir * 10.0 - 0.1, 0.0, 1.0) * outdoor * clamp(noise, 0.0, 1.0);
+}
+
+/***************************************************************************
+ # Copyright (c) 2015-21, NVIDIA CORPORATION. All rights reserved.
+ #
+ # Redistribution and use in source and binary forms, with or without
+ # modification, are permitted provided that the following conditions
+ # are met:
+ #  * Redistributions of source code must retain the above copyright
+ #    notice, this list of conditions and the following disclaimer.
+ #  * Redistributions in binary form must reproduce the above copyright
+ #    notice, this list of conditions and the following disclaimer in the
+ #    documentation and/or other materials provided with the distribution.
+ #  * Neither the name of NVIDIA CORPORATION nor the names of its
+ #    contributors may be used to endorse or promote products derived
+ #    from this software without specific prior written permission.
+ #
+ # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS "AS IS" AND ANY
+ # EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ # PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ # CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ # EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ # PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ # PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ # OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ **************************************************************************/
+
+/** Utility functions for Morton codes.
+    This is using the usual bit twiddling. See e.g.: https://fgiesen.wordpress.com/2009/12/13/decoding-morton-codes/
+
+    The interleave functions are named based to their output size in bits.
+    The deinterleave functions are named based on their input size in bits.
+    So, deinterleave_16bit(interleave_16bit(x)) == x should hold true.
+
+    TODO: Make this a host/device shared header, ensure code compiles on the host.
+    TODO: Add optimized 8-bit and 2x8-bit interleaving functions.
+    TODO: Use NvApi intrinsics to optimize the code on NV.
+*/
+
+/** 32-bit bit interleave (Morton code).
+    \param[in] v 16-bit values in the LSBs of each component (higher bits don't matter).
+    \return 32-bit value.
+*/
+uint interleave_32bit(uvec2 v)
+{
+    uint x = v.x & 0x0000ffffu;              // x = ---- ---- ---- ---- fedc ba98 7654 3210
+    uint y = v.y & 0x0000ffffu;
+
+    x = (x | (x << 8)) & 0x00FF00FFu;        // x = ---- ---- fedc ba98 ---- ---- 7654 3210
+    x = (x | (x << 4)) & 0x0F0F0F0Fu;        // x = ---- fedc ---- ba98 ---- 7654 ---- 3210
+    x = (x | (x << 2)) & 0x33333333u;        // x = --fe --dc --ba --98 --76 --54 --32 --10
+    x = (x | (x << 1)) & 0x55555555u;        // x = -f-e -d-c -b-a -9-8 -7-6 -5-4 -3-2 -1-0
+
+    y = (y | (y << 8)) & 0x00FF00FFu;
+    y = (y | (y << 4)) & 0x0F0F0F0Fu;
+    y = (y | (y << 2)) & 0x33333333u;
+    y = (y | (y << 1)) & 0x55555555u;
+
+    return x | (y << 1);
+}
+
+/** Generates a pair of 32-bit pseudorandom numbers based on a pair of 32-bit values.
+
+    The code uses a 64-bit block cipher, the Tiny Encryption Algorithm (TEA) by Wheeler et al., 1994.
+    The 128-bit key is fixed and adapted from here: https://www.ibiblio.org/e-notes/webcl/mc.htm.
+    This function can be useful for seeding other pseudorandom number generators.
+
+    \param[in] v0 The first value (low dword of the block).
+    \param[in] v1 The second value (high dword of the block).
+    \param[in] iterations Number of iterations (the authors recommend 16 at a minimum).
+    \return Two pseudorandom numbers (the block cipher of (v0,v1)).
+*/
+uvec2 blockCipherTEA(uint v0, uint v1)
+{
+    uint sum = 0u;
+    const uint delta = 0x9e3779b9u;
+    const uint k[4] = uint[4](0xa341316cu, 0xc8013ea4u, 0xad90777du, 0x7e95761eu); // 128-bit key.
+    for (int i = 0; i < 16; i++)
+    {
+        sum += delta;
+        v0 += ((v1 << 4) + k[0]) ^ (v1 + sum) ^ ((v1 >> 5) + k[1]);
+        v1 += ((v0 << 4) + k[2]) ^ (v0 + sum) ^ ((v0 >> 5) + k[3]);
+    }
+    return uvec2(v0, v1);
+}
+
+struct NoiseGenerator{
+    uint currentNum;
+};
+
+float nextFloat(inout NoiseGenerator noiseGenerator) {
+    const uint A = 1664525u;
+    const uint C = 1013904223u;
+    noiseGenerator.currentNum = (A * noiseGenerator.currentNum + C);
+    return float(noiseGenerator.currentNum >> 8) / 16777216.0;
+}
+
+vec2 nextVec2(inout NoiseGenerator noiseGenerator) {
+    vec2 noise;
+    noise.x = nextFloat(noiseGenerator);
+    noise.y = nextFloat(noiseGenerator);
+    return noise;
+}
+
+NoiseGenerator initNoiseGenerator(uvec2 texelIndex, uint frameIndex) {
+    uint seed = blockCipherTEA(interleave_32bit(texelIndex), frameIndex).x;
+    return NoiseGenerator(seed);
+}
+
+
+
+const mat2 rotation1 = mat2(cos(-0.2), sin(-0.2), -sin(-0.2), cos(-0.2));
+const vec2 scale1 = vec2(0.8, 0.4) * 64.0;
+
+const mat2 rotation2 = mat2(cos(0.2), sin(0.2), -sin(0.2), cos(0.2));
+const vec2 scale2 = vec2(1.2, 0.6) * 64.0;
+
+const vec2 scale3 = vec2(1.5, 2.0) * 64.0;
+
+float waterWaveHeight(vec2 coord1, vec2 coord2, vec2 coord3) {
+    float totalHeight = 0.0;
+    totalHeight += smooth2DNoise(coord1);
+    totalHeight += smooth2DNoise(coord2) * 0.4;
+    totalHeight += smooth2DNoise(coord3) * 0.2;
+    totalHeight /= 1.0 + 0.4 + 0.2;
+    return totalHeight;
+}
+
+vec2 sampleWaterNormal(vec2 coord, vec2 scale) {
+    vec2 fpc = floor(coord);
+    vec4 sh = textureGather(noisetex, fpc / 64.0, 0);
+
+    fpc = fract(coord);
+    vec2 weight = fpc * fpc * (3.0 - 2.0 * fpc);
+
+    sh.y = sh.w + sh.y - sh.x - sh.z;
+    vec2 normal = (sh.yy * weight.yx + (sh.zx - sh.ww)) * fpc * (6.0 * fpc - 6.0) * scale;
+    return normal;
+}
+
+vec2 waterWaveNormal(vec2 coord1, vec2 coord2, vec2 coord3) {
+    vec2 totalNormal = vec2(0.0);
+    totalNormal += sampleWaterNormal(coord1, rotation1 * scale1);
+    totalNormal += sampleWaterNormal(coord2, rotation2 * scale2) * 0.4;
+    totalNormal += sampleWaterNormal(coord3, scale3) * 0.2;
+    totalNormal /= 1.0 + 0.4 + 0.2;
+    return totalNormal;
+}
+
+vec3 waterWave(vec3 position, vec3 tangentDir) {
+    position /= (1.4);
+    vec2 coord = position.xz + vec2(position.y);
+
+    const vec3 stepScale = vec3(vec2(0.2 * 0.4 / (1.4 * 32.0)), 1.0);
+    float tangentDirZ = abs(tangentDir.z * inversesqrt(dot(tangentDir, tangentDir)));
+    vec3 stepSize = tangentDir * stepScale;
+    stepSize *= 0.2 / abs(stepSize.z);
+    tangentDirZ /= 0.2;
+
+    vec2 sampleCoord1 = rotation1 * (coord + vec2(0.03, 0.01) * frameTimeCounter * 0.7) * scale1;
+    vec2 sampleCoord2 = rotation2 * (coord - 0.75 * vec2(0.03, -0.01) * frameTimeCounter * 0.7) * scale2;
+    vec2 sampleCoord3 = (coord + 0.3 * vec2(0.01, -0.05) * frameTimeCounter * 0.7) * scale3;
+    float samplePosZ = 1.0;
+    vec4 sampleCoord12 = vec4(sampleCoord1, sampleCoord2);
+    vec3 sampleCoord3Z = vec3(sampleCoord3, samplePosZ);
+
+    vec2 stepSize1 = rotation1 * stepSize.xy * scale1;
+    vec2 stepSize2 = rotation2 * stepSize.xy * scale2;
+    vec2 stepSize3 = stepSize.xy * scale3;
+    float stepSizeZ = stepSize.z;
+    vec4 stepSize12 = vec4(stepSize1, stepSize2);
+    vec3 stepSize3Z = vec3(stepSize3, stepSizeZ);
+    for (int i = 0; i < 5; i++) {
+        sampleCoord12 += stepSize12;
+        sampleCoord3Z += stepSize3Z;
+        float sampleHeight = waterWaveHeight(sampleCoord12.xy, sampleCoord12.zw, sampleCoord3Z.xy);
+        if (sampleCoord3Z.z - sampleHeight < 0.0) {
+            break;
+        }
+    }
+    sampleCoord12 -= stepSize12;
+    sampleCoord3Z -= stepSize3Z;
+    for (int i = 0; i < 5; i++) {
+        float sampleHeight = waterWaveHeight(sampleCoord12.xy, sampleCoord12.zw, sampleCoord3Z.xy);
+        float nextLength = sampleCoord3Z.z - sampleHeight;
+        float nextScale = nextLength * tangentDirZ;
+        sampleCoord12 += stepSize12 * nextScale;
+        sampleCoord3Z += stepSize3Z * nextScale;
+    }
+    vec2 sampleNormal = waterWaveNormal(sampleCoord12.xy, sampleCoord12.zw, sampleCoord3Z.xy);
+
+    return normalize(vec3(sampleNormal * stepScale.xy, 1.0));
+}
+vec3 rainRippleNormal(vec3 position) {
+    float offsetY = mod(floor(frameTimeCounter * 90.0 * 1.0), 60.0);
+    vec2 uv = fract(position.xz / 1.0);
+    uv.y -= offsetY + 59.0;
+    uv.y *= 1.0 / 60.0;
+    vec3 normal = textureLod(gaux2, uv, 0.0).xyz * 2.0 - 1.0;
+    normal.xy *= rainStrength;
+    normal.z /= 0.5;
+    return normal;
+}
+
+vec2 clampCoordRange(vec2 coord, vec4 coordRange) {
+    return coordRange.xy + fract(coord) * coordRange.zw;
+}
+
+vec3 anisotropicOffsetLod(vec2 albedoTexSize, vec2 atlasTexelSize, vec2 texGradX, vec2 texGradY, vec2 quadSize) {
+    //https://www.shadertoy.com/view/4lXfzn
+    mat2 qd = inverse(mat2(texGradX * albedoTexSize, texGradY * albedoTexSize));
+    qd = transpose(qd) * qd;
+
+    float d = determinant(qd);
+    float t = (qd[0][0] + qd[1][1]) * 0.5;
+
+    float D = abs(t * t - d);
+    D = D * inversesqrt(D);
+    float V = t - D;
+    float v = t + D;
+    float l = max(0.0, -0.5 * log2(v));
+
+    vec2 A = vec2(qd[0][1], V - qd[0][0]);
+    A *= inversesqrt(V * dot(A, A)) / 4;
+    A = signMul(max(vec2(0.0), abs(A)), A) * atlasTexelSize * quadSize;
+    return vec3(A, l);
+}
+
+vec4 anisotropicFilter(vec2 coord, vec2 offset, float lod, vec4 coordRange, vec2 quadSize) {
+    
+        vec2 sampleCoord = (coord - coordRange.xy) * quadSize + (0.5 - 0.5 * 4) * offset;
+        vec4 albedo = vec4(0.0);
+        float opaque = 0.0;
+        for (int i = 0; i < 4; i++) {
+            sampleCoord += offset;
+            vec4 albedoSample = textureLod(gtexture, clampCoordRange(sampleCoord, coordRange), lod);
+            albedo.rgb += albedoSample.rgb * albedoSample.a;
+            albedo.a += albedoSample.a;
+            opaque = max(opaque, albedoSample.a);
+        }
+        albedo.rgb *= max(1.0 / albedo.a, 1e-5);
+        albedo.a /= 4;
+        albedo.a = clamp(albedo.a + float(opaque > 0.999), 0.0, 1.0) * clamp(texture(gtexture, coord).a * 10.0, 0.0, 1.0);
+    
+        
+        
+        
+    
+
+    return albedo;
+}
+
+
+    vec4 heightGather(sampler2D normalSampler, vec2 coord, vec2 coord00, vec4 coordRange, vec2 quadTexelSize, vec2 normalTexSize) {
+        ivec2 texel00 = ivec2(coord00);
+        ivec2 texel11 = ivec2(clampCoordRange(coord + quadTexelSize, coordRange) * normalTexSize);
+        vec4 sh = vec4(
+            texelFetch(normalSampler, ivec2(texel00.x, texel11.y), 0).a,
+            texelFetch(normalSampler, texel11, 0).a,
+            texelFetch(normalSampler, ivec2(texel11.x, texel00.y), 0).a,
+            texelFetch(normalSampler, texel00, 0).a
+        );
+        sh += clamp(1.0 - sh * 1e+10, vec4(0.0), vec4(1.0));
+        return sh;
+    }
+
+    float bilinearHeightSample(sampler2D normalSampler, vec2 coord, vec4 coordRange, vec2 quadTexelSize, vec2 normalTexSize) {
+        vec2 coord00 = clampCoordRange(coord - quadTexelSize, coordRange) * normalTexSize;
+        vec4 sh = heightGather(normalSampler, coord, coord00, coordRange, quadTexelSize, normalTexSize);
+        vec2 fpc = fract(coord00);
+        vec2 x = mix(sh.wx, sh.zy, vec2(fpc.x));
+        return mix(x.x, x.y, fpc.y);
+    }
+
+    vec3 heightBasedNormal(sampler2D normalSampler, vec2 coord, vec4 coordRange, vec2 quadTexelSize, vec2 normalTexSize, vec2 pixelScale) {
+        vec2 tileCoord = (coord - coordRange.xy) / coordRange.zw;
+        vec2 coord00 = clampCoordRange(tileCoord - 0.499 * quadTexelSize, coordRange) * normalTexSize;
+        vec4 sh = heightGather(normalSampler, tileCoord, coord00, coordRange, 0.499 * quadTexelSize, normalTexSize);
+
+        vec2 fpc = fract(coord00);
+        sh.y = sh.x + sh.z - sh.w - sh.y;
+        vec3 normal = vec3(
+            sh.y * fpc.yx + (sh.w - sh.zx),
+            (5.0 / 1.0)
+        );
+        normal.xy *= pixelScale;
+
+        return normal;
+    }
+
+    vec4 bilinearNormalSample(sampler2D normalSampler, vec2 coord, vec4 coordRange, vec2 quadTexelSize, vec2 normalTexSize) {
+        vec4[4] sh;
+        vec2 tileCoord = (coord - coordRange.xy) / coordRange.zw;
+        vec2 coord00 = clampCoordRange(tileCoord - 0.5 * quadTexelSize, coordRange);
+        vec2 coord11 = clampCoordRange(tileCoord + 0.5 * quadTexelSize, coordRange);
+        sh = vec4[4](
+            textureLod(normalSampler, vec2(coord00.x, coord11.y), 0.0),
+            textureLod(normalSampler, coord11, 0.0),
+            textureLod(normalSampler, vec2(coord11.x, coord00.y), 0.0),
+            textureLod(normalSampler, coord00, 0.0)
+        );
+        vec2 fpc = fract(coord * normalTexSize + 0.5);
+        return mix(
+            mix(sh[3], sh[2], vec4(fpc.x)),
+            mix(sh[0], sh[1], vec4(fpc.x)),
+            vec4(fpc.y)
+        );
+    }
+
+    vec2 perPixelParallax(
+        vec2 coord, vec3 viewPos, mat3 tbnMatrix, vec2 textureScale, vec2 albedoTexSize, vec2 atlasTexelSize, vec4 coordRange,
+        inout vec3 parallaxTexNormal, inout float parallaxOffset
+    ) {
+        vec2 parallaxCoord = coord;
+        parallaxOffset = 0.0;
+        float sampleHeight = textureLod(normals, coord, 0.0).a;
+        sampleHeight += clamp(1.0 - sampleHeight * 1e+10, 0.0, 1.0);
+
+        if (sampleHeight < 0.999) {
+            vec3 stepDir = viewPos * tbnMatrix;
+            stepDir.xy *= textureScale;
+            stepDir.xy *= 1.0 * albedoTexSize * 0.2;
+            stepDir = normalize(stepDir);
+            stepDir.z = -stepDir.z;
+
+            coord *= albedoTexSize;
+            ivec2 basicTexel = ivec2(round(coordRange.xy * albedoTexSize));
+            ivec2 sampleTexel = ivec2(floor(coord));
+            vec2 stepLength = abs(1.0 / stepDir.xy);
+            ivec2 dirSigned = (floatBitsToInt(stepDir.xy) >> 31) * 2 + 1;
+            vec2 nextLength = (dirSigned * (0.5 - coord + sampleTexel) + 0.5) * stepLength;
+            ivec2 tileSize = ivec2(round(coordRange.zw * albedoTexSize));
+            sampleHeight = 1.0 - sampleHeight;
+            sampleTexel -= basicTexel;
+
+            for (int i = 0; i < 80; i++) {
+                float rayLength = min(nextLength.x, nextLength.y);
+                float rayHeight = rayLength * stepDir.z;
+                if (rayHeight > sampleHeight) {
+                    parallaxOffset = sampleHeight;
+                    break;
+                }
+                ivec2 nextPixel = (floatBitsToInt(vec2(rayLength) - nextLength) >> 31) + 1;
+                nextLength += nextPixel * stepLength;
+                sampleTexel += nextPixel * dirSigned;
+                sampleTexel = sampleTexel % tileSize;
+                sampleHeight = texelFetch(normals, sampleTexel + basicTexel, 0).a;
+                sampleHeight += clamp(1.0 - sampleHeight * 1e+10, 0.0, 1.0);
+                sampleHeight = 1.0 - sampleHeight;
+                if (rayHeight > sampleHeight) {
+                    parallaxOffset = rayHeight;
+                    parallaxTexNormal = vec3(-nextPixel * dirSigned, 0.0);
+                    break;
+                }
+            }
+            parallaxCoord = (sampleTexel + basicTexel + vec2(0.5)) * atlasTexelSize;
+        }
+        return parallaxCoord;
+    }
+
+    vec2 calculateParallax(
+        vec2 coord, vec3 viewPos, mat3 tbnMatrix, vec2 textureScale, vec4 coordRange, vec2 quadSize, vec2 albedoTexSize, vec2 albedoTexelSize, inout float parallaxOffset
+    ) {
+        vec2 quadTexelSize = 0.499 * albedoTexelSize * quadSize;
+
+        vec3 parallaxCoord = vec3(coord, 1.0);
+
+        vec2 firstCoord = (coord - coordRange.xy) * quadSize;
+        
+            vec2 coord00 = clampCoordRange(firstCoord - quadTexelSize, coordRange) * albedoTexSize;
+            vec4 sh = heightGather(normals, firstCoord, coord00, coordRange, quadTexelSize, albedoTexSize);
+            float startHeight = dot(sh, vec4(0.25));
+        
+            
+            
+        
+
+        if (startHeight < 1.0) {
+            parallaxCoord.st = firstCoord;
+            vec3 viewVector = viewPos * tbnMatrix;
+            viewVector.xy *= textureScale;
+            vec3 stepSize = viewVector / (80 * abs(viewVector.z));
+            stepSize.xy *= 1.0 * 0.2 * quadSize;
+            float stepScale = 2.0 / 80;
+
+            for (int i = 0; i < 80; i++) {
+                parallaxCoord += stepSize * stepScale;
+                
+                    float sampleHeight = bilinearHeightSample(normals, parallaxCoord.st, coordRange, quadTexelSize, albedoTexSize);
+                
+                    
+                    
+                
+                if (sampleHeight > parallaxCoord.z) {
+                    break;
+                }
+                stepScale += 2.0 / 80;
+            }
+            parallaxCoord -= stepSize * stepScale;
+            stepSize *= 0.5;
+            for (int i = 0; i < 8; i++) {
+                parallaxCoord += stepSize * stepScale;
+                
+                    float sampleHeight = bilinearHeightSample(normals, parallaxCoord.st, coordRange, quadTexelSize, albedoTexSize);
+                
+                    
+                    
+                
+                if (sampleHeight > parallaxCoord.z) {
+                    parallaxCoord -= stepSize * stepScale;
+                    stepSize *= 0.5;
+                }
+            }
+            parallaxCoord += 2.0 * stepSize * stepScale;
+            parallaxCoord.st = clampCoordRange(parallaxCoord.st, coordRange);
+        }
+        parallaxOffset = 1.0 - parallaxCoord.z;
+        return parallaxCoord.st;
+    }
+
+
+void voxy_emitFragment(VoxyFragmentParameters parameters) {
+    GbufferData rawData;
+    rawData.albedo = parameters.sampledColour * parameters.tinting;
+
+    vec3 worldNormal = vec3(
+        float((parameters.face >> 2) & 1u),
+        0.0,
+        float((parameters.face >> 1) & 1u)
+    );
+    worldNormal.y = 1.0 - worldNormal.x - worldNormal.z;
+    worldNormal *= uintBitsToFloat((parameters.face << 31) ^ 0xBF800000u);
+    vec3 viewNormal = mat3(gbufferModelView) * worldNormal;
+    rawData.normal = viewNormal;
+    rawData.geoNormal = viewNormal;
+
+    rawData.lightmap = clamp(parameters.lightMap * 16.0 / 15.0 - 0.5 / 15.0, 0.0, 1.0);
+    rawData.smoothness = 1.0;
+    rawData.metalness = 0.0;
+    rawData.porosity = 0.0;
+    rawData.emissive = 0.0;
+    rawData.materialID = 0;
+    rawData.parallaxOffset = 0.0;
+    rawData.depth = 0.0;
+
+    int blockId = int(parameters.customId);
+    float emissive = clamp(float(max(0, blockId) & 0x7000) - 16384.0, 0.0, 1.0);
+    if (blockId < -0.5) {
+        
+            if (dot(parameters.tinting.rgb, vec3(1.0)) < 2.999) {
+                materialID = 1;
+            }
+        
+        
+            rawData.emissive = float(rawData.lightmap.x > 0.99999);
+        
+    }
+    if (blockId == 8192) {
+        rawData.materialID = 1;
+    }
+
+    vec3 tangent = mat3(gbufferModelView) * vec3(abs(worldNormal.y) + worldNormal.z, 0.0, -worldNormal.x);
+    vec3 bitangent = mat3(gbufferModelView) * vec3(0.0, abs(worldNormal.y) - 1.0, worldNormal.y);
+    mat3 tbnMatrix = mat3(tangent, bitangent, viewNormal);
+
+    vec3 viewPos = screenToViewPosLod(gl_FragCoord.st * texelSize - 0.5 * taaOffsetVX, gl_FragCoord.z);
+    vec3 mcPos = viewToWorldPos(viewPos) + cameraPosition;
+
+    float wetStrength = 0.0;
+    vec3 rippleNormal = vec3(0.0, 0.0, 1.0);
+    float viewDepthInv = inversesqrt(dot(viewPos, viewPos));
+    vec3 viewDir = viewPos * (-viewDepthInv);
+    if (rainyStrength > 0.0) {
+        float outdoor = clamp(15.0 * rawData.lightmap.y - 14.0, 0.0, 1.0);
+
+        vec3 worldNormal = mat3(gbufferModelViewInverse) * rawData.geoNormal;
+        
+            
+        
+            wetStrength = groundWetStrength(mcPos, worldNormal.y, rawData.metalness, 1.0, outdoor);
+        
+        rawData.smoothness += (1.0 - rawData.smoothness) * wetStrength;
+
+        
+            rippleNormal = rainRippleNormal(mcPos);
+            rippleNormal.xy *= viewDepthInv / (viewDepthInv + 0.1 * 2.0);
+        
+    }
+
+    rawData.normal = vec3(0.0, 0.0, 1.0);
+    if (rawData.materialID == 1) {
+        rawData.albedo.rgb = parameters.tinting.rgb;
+        vec3 tangentDir = transpose(tbnMatrix) * viewPos;
+        rawData.normal = waterWave(mcPos / 32.0, tangentDir);
+    }
+    rawData.normal.xy += rippleNormal.xy * wetStrength;
+    rawData.normal = normalize(tbnMatrix * rawData.normal);
+
+    float NdotV = dot(rawData.normal, viewDir);
+    vec3 edgeNormal = rawData.normal - viewDir * NdotV;
+    float curveStart = dot(viewDir, tbnMatrix[2]);
+    float weight = clamp(curveStart - curveStart * exp(NdotV / curveStart - 1.0), 0.0, 1.0);
+    weight = max(NdotV, curveStart) - weight;
+    rawData.normal = viewDir * weight + edgeNormal * max(0.0, inversesqrt(dot(edgeNormal, edgeNormal) / (1.0 - weight * weight)));
+    float fadeFactor = viewDepthInv * curveStart * gbufferProjection[1].y * screenSize.y;
+    rawData.normal = mix(tbnMatrix[2], rawData.normal, fadeFactor / (fadeFactor + 0.3));
+
+    packUpGbufferDataSolid(rawData, gbufferData0, gbufferData1, gbufferData2);
+}
+

@@ -1,0 +1,13 @@
+#Hides the text label shown for names items.
+#Default Value: false
+disable_name_tag_rendering = false
+#Pick the scale of rendered items in invisible item frames.
+#A scale value of 0.5 is equal to the default rendering of items in normal item frames.
+#Default Value: 0.75
+# Default: 0.75
+# Range: 0.0 ~ 1.0
+item_scale_when_invisible = 0.75
+#Prevents items from rendering slightly closer to the attached block in invisible item frames.
+#Allows for custom item textures (CIT) to look much better.
+#Default Value: false
+disable_item_offset_when_invisible = false

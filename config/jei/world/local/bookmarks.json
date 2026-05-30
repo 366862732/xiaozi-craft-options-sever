@@ -1,0 +1,6 @@
+[
+  {"version":3},
+  {"ingredient":{"id":"minecraft:black_candle"},"type":"item_stack","bookmarkType":"INGREDIENT"},
+  {"ingredient":{"id":"minecraft:light_blue_bed"},"type":"item_stack","bookmarkType":"INGREDIENT"},
+  {"ingredient":{"id":"minecraft:stonecutter"},"type":"item_stack","bookmarkType":"INGREDIENT"}
+]

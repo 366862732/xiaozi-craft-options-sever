@@ -1,0 +1,119 @@
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: CustomSkinLoader 14.28
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: DataDir: D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Operating System: Windows 11 (amd64) version 10.0
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Java Version: 26.0.1, BellSoft
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), BellSoft
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Minecraft: 26.1.2
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Config File: D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\CustomSkinLoader.json
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Try to load config.
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Successfully load config.
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: GameProfile
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: MojangAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: Legacy
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: CustomSkinAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: CustomSKinAPIPlus
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: UniSkinAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: ElyByAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: GlitchlessAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: MinecraftCapesAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Add a profile loader: WynntilsAPI
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: Successfully update config.
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: version : 14.28
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: buildNumber : 38
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: loadlist : [{ "name": "GameProfile", "type": "GameProfile" }, { "name": "Mojang", "type": "MojangAPI", "apiRoot": "https://api.mojang.com/", "sessionRoot": "https://sessionserver.mojang.com/" }, { "name": "LittleSkin", "type": "CustomSkinAPI", "root": "https://littleskin.cn/csl/" }, { "name": "BlessingSkin", "type": "CustomSkinAPI", "root": "https://skin.prinzeugen.net/" }, { "name": "ElyBy", "type": "ElyByAPI", "root": "http://skinsystem.ely.by/textures/" }, { "name": "SkinMe", "type": "UniSkinAPI", "root": "http://www.skinme.cc/uniskin/" }, { "name": "TLauncher", "type": "ElyByAPI", "root": "https://auth.tlauncher.org/skin/profile/texture/login/" }, { "name": "GlitchlessGames", "type": "GlitchlessAPI", "root": "https://games.glitchless.ru/api/minecraft/users/profiles/textures/?nickname=" }, { "name": "LocalSkin", "type": "Legacy", "checkPNG": "false", "skin": "LocalSkin/skins/{USERNAME}.png", "model": "auto", "cape": "LocalSkin/capes/{USERNAME}.png", "elytra": "LocalSkin/elytras/{USERNAME}.png" }, { "name": "MinecraftCapes", "type": "MinecraftCapesAPI", "root": "https://api.minecraftcapes.net/profile/" }, { "name": "OptiFine", "type": "Legacy", "checkPNG": "false", "model": "auto", "cape": "https://optifine.net/capes/{USERNAME}.png" }, { "name": "Wynntils", "type": "WynntilsAPI", "root": "https://athena.wynntils.com/user/getInfo" }, { "name": "CloakPlus", "type": "Legacy", "checkPNG": "false", "model": "auto", "cape": "http://161.35.130.99/capes/{USERNAME}.png" }, { "name": "Cosmetica", "type": "Legacy", "checkPNG": "false", "model": "auto", "cape": "https://api.cosmetica.cc/get/cloak?username={USERNAME}&uuid={STANDARD_UUID}&nothirdparty" }]
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: enableDynamicSkull : true
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: enableTransparentSkin : true
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: forceLoadAllTextures : true
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: enableCape : true
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: threadPoolSize : 8
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: enableLogStdOut : false
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: cacheExpiry : 30
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: forceUpdateSkull : false
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: enableLocalProfileCache : false
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: enableCacheAutoClean : false
+[2026-05-30 09:53:43] [Render thread/INFO] [CustomSkinLoader Core]: forceDisableCache : false
+[2026-05-30 09:53:43] [366862732/INFO] [CustomSkinLoader Core]: Loading 366862732's profile.
+[2026-05-30 09:53:43] [366862732/INFO] [CustomSkinLoader Core]: 1/14 Try to load profile from 'GameProfile'.
+[2026-05-30 09:53:43] [366862732/INFO] [CustomSkinLoader Core]: Default profile will be used.
+[2026-05-30 09:53:43] [366862732/INFO] [CustomSkinLoader Core]: 2/14 Try to load profile from 'Mojang'.
+[2026-05-30 09:53:43] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://api.mojang.com/profiles/minecraft'.
+[2026-05-30 09:53:43] [366862732/INFO] [CustomSkinLoader Core]: Payload: ["366862732"]
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully request (Response Code: 200 , Content Length: 75)
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Content: [ {
+  "id" : "d93e63f562ab4e48b136dcf686050548",
+  "name" : "366862732"
+} ]
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://sessionserver.mojang.com/session/minecraft/profile/d93e63f562ab4e48b136dcf686050548'.
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully request (Response Code: 200 , Content Length: 611)
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Saved to cache (Length: 611 , Path: 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\a183c9b22c0100cbe25181c25ab0da3f3caf3a4a' , Expire: 1780106044)
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Content: {
+  "id" : "d93e63f562ab4e48b136dcf686050548",
+  "name" : "366862732",
+  "properties" : [ {
+    "name" : "textures",
+    "value" : "ewogICJ0aW1lc3RhbXAiIDogMTc4MDEwNjAyMTkxNCwKICAicHJvZmlsZUlkIiA6ICJkOTNlNjNmNTYyYWI0ZTQ4YjEzNmRjZjY4NjA1MDU0OCIsCiAgInByb2ZpbGVOYW1lIiA6ICIzNjY4NjI3MzIiLAogICJ0ZXh0dXJlcyIgOiB7CiAgICAiU0tJTiIgOiB7CiAgICAgICJ1cmwiIDogImh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYTIzODZjZmMxOTNhNDc4NTBlNDAyNWVhMWEwZTU3NTk5OTk5YTI2MjE0MjcwYjE0MDdlYmFiODlmNTc2YTA4IiwKICAgICAgIm1ldGFkYXRhIiA6IHsKICAgICAgICAibW9kZWwiIDogInNsaW0iCiAgICAgIH0KICAgIH0KICB9Cn0="
+  } ],
+  "profileActions" : [ ]
+}
+[2026-05-30 09:53:44] [366862732/INFO] [CustomSkinLoader Core]: 3/14 Try to load profile from 'LittleSkin'.
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://littleskin.cn/csl/366862732.json'.
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Cache file found (Length: 2 , Path: 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\180e8ded6bb8e9f9eb5684bd712de12518e67faa' , Expire: 1780106033)
+[2026-05-30 09:53:44] [366862732/INFO] [CustomSkinLoader Core]: Try to load from cache 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\180e8ded6bb8e9f9eb5684bd712de12518e67faa'.
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully load from cache
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Content: {}
+[2026-05-30 09:53:44] [366862732/INFO] [CustomSkinLoader Core]: Both skin and cape not found.
+[2026-05-30 09:53:44] [366862732/INFO] [CustomSkinLoader Core]: 4/14 Try to load profile from 'BlessingSkin'.
+[2026-05-30 09:53:44] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://skin.prinzeugen.net/366862732.json'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request (Response Code: 404)
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: Profile not found.
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: 5/14 Try to load profile from 'ElyBy'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'http://skinsystem.ely.by/textures/366862732'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Cache file found (Length: 0 , Path: 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\df3bae16106b5dbda007fcd2ff26f0552b82ae96' , Expire: 1780109544)
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: Try to load from cache 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\df3bae16106b5dbda007fcd2ff26f0552b82ae96'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully load from cache
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Content: 
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: Profile not found.
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: 6/14 Try to load profile from 'SkinMe'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'http://www.skinme.cc/uniskin/366862732.json'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request http://www.skinme.cc/uniskin/366862732.json (Exception: java.net.UnknownHostException: www.skinme.cc)
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: Profile not found.
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: 7/14 Try to load profile from 'TLauncher'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://auth.tlauncher.org/skin/profile/texture/login/366862732'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Cache file found (Length: 2 , Path: 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\0d726bc7fb926c9d696871a35188d336fb08f9f4' , Expire: 1780106037)
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: Try to load from cache 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\0d726bc7fb926c9d696871a35188d336fb08f9f4'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully load from cache
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Content: {}
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: Both skin and cape not found.
+[2026-05-30 09:53:46] [366862732/INFO] [CustomSkinLoader Core]: 8/14 Try to load profile from 'GlitchlessGames'.
+[2026-05-30 09:53:46] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://games.glitchless.ru/api/minecraft/users/profiles/textures/?nickname=366862732'.
+[2026-05-30 09:53:47] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request (Response Code: 404)
+[2026-05-30 09:53:47] [366862732/INFO] [CustomSkinLoader Core]: Profile not found.
+[2026-05-30 09:53:47] [366862732/INFO] [CustomSkinLoader Core]: 9/14 Try to load profile from 'LocalSkin'.
+[2026-05-30 09:53:47] [366862732/INFO] [CustomSkinLoader Core]: No texture could be found.
+[2026-05-30 09:53:47] [366862732/INFO] [CustomSkinLoader Core]: 10/14 Try to load profile from 'MinecraftCapes'.
+[2026-05-30 09:53:47] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://api.minecraftcapes.net/profile/d93e63f562ab4e48b136dcf686050548'.
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully request (Response Code: 304 , Content Length: -1)
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Cache file found (Length: 241 , Path: 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\f75465a1b1533914fc82b1b79e8f5765547bc56d' , Expire: 0)
+[2026-05-30 09:53:48] [366862732/INFO] [CustomSkinLoader Core]: Try to load from cache 'D:\.minecraft\versions\xiaozi craft 26.1.2\CustomSkinLoader\caches\f75465a1b1533914fc82b1b79e8f5765547bc56d'.
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Successfully load from cache
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Content: {"animatedCape":false,"capeGlint":false,"upsideDown":false,"animated_cape_url":null,"cape_url":null,"ear_url":null,"textures":{"_IMPORTANT":"We are removing base64 textures, please use the above parameters instead.","cape":null,"ears":null}}
+[2026-05-30 09:53:48] [366862732/INFO] [CustomSkinLoader Core]: Both skin and cape not found.
+[2026-05-30 09:53:48] [366862732/INFO] [CustomSkinLoader Core]: 11/14 Try to load profile from 'OptiFine'.
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://optifine.net/capes/366862732.png'.
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request (Response Code: 404)
+[2026-05-30 09:53:48] [366862732/INFO] [CustomSkinLoader Core]: No texture could be found.
+[2026-05-30 09:53:48] [366862732/INFO] [CustomSkinLoader Core]: 12/14 Try to load profile from 'Wynntils'.
+[2026-05-30 09:53:48] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://athena.wynntils.com/user/getInfo'.
+[2026-05-30 09:53:48] [366862732/INFO] [CustomSkinLoader Core]: Payload: {"uuid":"d93e63f5-62ab-4e48-b136-dcf686050548"}
+[2026-05-30 09:53:49] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request (Response Code: 403)
+[2026-05-30 09:53:49] [366862732/INFO] [CustomSkinLoader Core]: Profile not found.
+[2026-05-30 09:53:49] [366862732/INFO] [CustomSkinLoader Core]: 13/14 Try to load profile from 'CloakPlus'.
+[2026-05-30 09:53:49] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'http://161.35.130.99/capes/366862732.png'.
+[2026-05-30 09:53:50] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request (Response Code: 404)
+[2026-05-30 09:53:50] [366862732/INFO] [CustomSkinLoader Core]: No texture could be found.
+[2026-05-30 09:53:50] [366862732/INFO] [CustomSkinLoader Core]: 14/14 Try to load profile from 'Cosmetica'.
+[2026-05-30 09:53:50] [366862732/DEBUG] [CustomSkinLoader Core]: Try to request 'https://api.cosmetica.cc/get/cloak?username=366862732&uuid=d93e63f5-62ab-4e48-b136-dcf686050548&nothirdparty'.
+[2026-05-30 09:53:51] [366862732/DEBUG] [CustomSkinLoader Core]: Failed to request (Response Code: 403)
+[2026-05-30 09:53:51] [366862732/INFO] [CustomSkinLoader Core]: No texture could be found.
+[2026-05-30 09:53:51] [366862732/INFO] [CustomSkinLoader Core]: 366862732's profile loaded.
+[2026-05-30 09:53:51] [366862732/INFO] [CustomSkinLoader Core]: (SkinUrl: http://textures.minecraft.net/texture/a2386cfc193a47850e4025ea1a0e57599999a26214270b1407ebab89f576a08 , Model: slim , CapeUrl: null  , Expiry: 1780106061)

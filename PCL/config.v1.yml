@@ -1,0 +1,22 @@
+﻿State: 9
+Info: ''
+Logo: pack://application:,,,/Plain Craft Launcher 2;component/Images/Blocks/Fabric.png
+ReleaseTime: 2026-04-09 18:12
+VersionFabric: 0.19.2
+VersionLegacyFabric: ''
+VersionQuilt: ''
+VersionLabyMod: ''
+VersionOptiFine: ''
+VersionLiteLoader: false
+VersionForge: ''
+VersionNeoForge: ''
+VersionCleanroom: ''
+VersionVanillaName: 26.1.2
+VersionVanilla: 26.1.2
+IsStar: true
+VersionArgumentIndieV2: true
+VersionLaunchCount: 54
+VersionAdvanceJvm: -XX:+UseZGC -XX:+AlwaysPreTouch -XX:ConcGCThreads=6 -XX:ParallelGCThreads=12 -XX:ZCollectionInterval=0 -XX:SoftMaxHeapSize=36G -XX:-OmitStackTraceInFastThrow -Djdk.lang.Process.allowAmbiguousCommands=true -Dfml.ignoreInvalidMinecraftCertificates=true -Dfml.ignorePatchDiscrepancies=true -Dlog4j2.formatMsgNoLookups=true -XX:+UseCompactObjectHeaders
+VersionArgumentJavaSelect: '{"kind":"exist","JavaExePath":"C:\\Program Files\\BellSoft\\LibericaJDK-26-Full\\bin\\java.exe"}'
+VersionRamType: 1
+VersionRamCustom: 45

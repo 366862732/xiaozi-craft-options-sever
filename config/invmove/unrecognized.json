@@ -1,0 +1,7 @@
+{
+  "allowMovement": {
+    "net.minecraft.client.gui.screens.PauseScreen": true,
+    "de.maxhenkel.camerautils.gui.ZoomScreen": true
+  },
+  "hideBackground": {}
+}

@@ -1,0 +1,43 @@
+/chunky center
+/chunky radius 1024
+/chunky start
+/chunky center
+/chunky radius 4096
+/chunky start
+/time set minecraft:day
+/tp ~ 10000 ~
+/chunky radius 8192
+/chunky start
+/time set day
+/time set minecraft:day
+/
+/tp ~ 4000 ~
+/chunky radius 10240
+/chunky start
+/chunky radius 20480
+/chunky start
+/
+/chunky cancel
+/chunky confirm
+/chunky radius 20480
+/chunky start
+/chunky cancel
+/chunky confirm
+/chunky radius 20480
+/chunky start
+/time set minecraft:day
+/gamerule keep_inventory true
+/tp ~ 10000 ~
+/time set minecraft:day
+/chunky cancel
+/chunky confirm
+/chunky radius 20480
+/chunky start
+/chunky cancel minecraft:overworld
+/chunky confirm
+/tp ~ 10000 ~
+/tp ~ 11000 ~
+/chunky radius 20480
+/chunky start
+/time set minecraft:day
+/tp ~ 11000 ~

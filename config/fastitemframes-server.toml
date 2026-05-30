@@ -1,0 +1,4 @@
+#Transform all vanilla item frame entities to blocks when loading chunks. Otherwise only newly placed ite frames will be blocks.
+#When disabled; individual item frame entities can be converted manually by breaking and replacing them.
+#Default Value: false
+convert_all_existing_item_frames = false

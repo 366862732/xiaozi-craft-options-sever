@@ -1,0 +1,8 @@
+{
+  "fullscreenMode": "OFF",
+  "preferredFullscreenMode": "BORDERLESS",
+  "fullscreenType": "minecraft:default",
+  "borderlessFullscreenType": "minecraft:windowed",
+  "useScaledFramebuffer": true,
+  "pauseOnLostFocusDuringMultiplayer": true
+}

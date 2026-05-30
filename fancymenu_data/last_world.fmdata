@@ -1,0 +1,7 @@
+type = last_world
+
+last_world {
+  is_server = false
+  world = D:/.minecraft/versions/xiaozi craft 26.1.2/saves/新的世界
+}
+

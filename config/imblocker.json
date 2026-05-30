@@ -1,0 +1,30 @@
+{
+  "basicSettings": {
+    "screenWhitelist": [
+      "net.mehvahdjukaar.supplementaries.client.screens.TextHolderEditScreen",
+      "com.simibubi.create.content.equipment.clipboard.ClipboardScreen"
+    ],
+    "enableScreenRecovering": false,
+    "recoveredScreens": [],
+    "englishStateImpl": "CONVERSION_STATUS",
+    "primaryEnglishState": "CJK",
+    "useStrictCursorRect": false
+  },
+  "advanceSettings": {
+    "enableCharSimulation": false
+  },
+  "windowsCompatibilitySettings": {
+    "enableConversionStatusApi": true,
+    "enableIngameIME": false
+  },
+  "linuxCompatibilitySettings": {
+    "enableKeyboardPatch": true,
+    "isHeadlessPreeditMode": false,
+    "linuxExtraScale": 1.0,
+    "ibusOnArgName": "libpinyin",
+    "ibusOffArgName": "xkb:us::eng",
+    "fcitx5OnArgName": "-o",
+    "fcitx5OffArgName": "-c",
+    "fcitx5OnStateName": "2"
+  }
+}
