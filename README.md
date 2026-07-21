@@ -1,19 +1,42 @@
-xiaozi craft是一个什么样的项目呢？
-它只在安装Minecraft游戏时，我们会为了下载常用的模组而四处翻找，而xiaozi craft便是解决这个问题的最佳选择！，xiaozi craft将这些常用的模组整合起来，并制作成了整合包，能让你省去繁琐的找模组环节，直接开始游玩！
-并且xiaozi craft 还提供了服务端的核心与文件。与你的朋友一起游玩！
-#### 如果你想要查看最新上传请切换master分支
+When installing Minecraft, we often have to search everywhere to download commonly used mods. xiaozi craft is the best solution to this problem! It integrates these popular mods into a convenient modpack, saving you the hassle of searching for mods individually and letting you jump straight into the game!
+
+Additionally, xiaozi craft provides server core files and resources, making it easy to play with your friends!
+
+You can download this modpack from any Minecraft launcher; it is named "xiaozi craft" on the CurseForge platform. Use it to unleash the best performance from your computer!
+
+Full version / Open source project homepage:    
+[https://github.com/366862732/xiaozi-craft](https://github.com/366862732/xiaozi-craft)  
+
+this is xiaozi craft docs:
+
 ```
-下方是最近一次的更新
-====================================================================
-构建时间：2026/5/30
-ver:1.6
-java:JDK 26
-minecraft:26.1.2
-Fabic:0.19.2
-Fabic API:含有多个
-说明：对多个版本的更新，把1.21.10之前的版本与1.21.10的模组进行统一和补全，修复之前版本中的遗留问题
-====================================================================
+https://366862732.github.io/xiaozi-craft-docs.github.io/en/user-guide/intro.html
 ```
-QQ交流群：1073461442
-xiaozi craft是开源项目，保留所有再次分发的权利，如发现有使用xiaozi craft进行商业盈利，请举报或者向作者反馈
-  
+
+Additionally, it supports both server and client-side usage. It is recommended to run the server on a dedicated computer.
+
+this is update log :
+
+```
+ Below is the most recent update
+
+Build Date: 2026/7/20
+```
+
+Version: 1.7 Release Java: JDK 26 / 25 Minecraft: 26.2 / 26.1.2 / 1.21.11 / 1.21.10 / 1.21.8 / 1.21.7 / 1.21.4 / 1.21.1
+
+```
+ Fabric: 0.19.3
+```
+
+to get issues :
+
+```
+https://366862732.github.io/xiaozi-craft-docs.github.io/en/user-guide/feedback.html
+```
+
+中文：
+
+```
+https://366862732.github.io/xiaozi-craft-docs.github.io/user-guide/feedback.html
+```
